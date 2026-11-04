@@ -3,6 +3,8 @@ a local llama.cpp server, ...).
 
 Env (read on every call, so tests can monkeypatch): LLM_API_KEY, LLM_BASE_URL, LLM_MODEL.
 All three must be set (same rule as config.llm_configured); otherwise the app runs rules-only.
+Optional LLM_FALLBACK_MODEL: chat() retries once with it when the primary model is overloaded
+(HTTP 429/500/503) or times out.
 """
 from __future__ import annotations
 
@@ -42,12 +44,29 @@ def mock_mode() -> bool:   # older name, kept for callers that still use it
     return not configured()
 
 
+FALLBACK_STATUS = {429, 500, 503}    # "high demand" / overloaded: worth one try on the fallback model
+
+
 async def chat(messages: list[dict], temperature: float = 0.3, json_mode: bool = False, timeout: float = 20) -> str:
-    """One chat completion; returns the assistant text. Raises LLMError on any failure."""
+    """One chat completion; returns the assistant text. Raises LLMError on any failure.
+    If the primary model answers 429/500/503 or times out and LLM_FALLBACK_MODEL is set, retries once with it."""
     if not configured():
         raise LLMError("LLM not configured (set LLM_API_KEY, LLM_BASE_URL, LLM_MODEL)")
+    primary = _env("LLM_MODEL")
+    try:
+        return await _complete(primary, messages, temperature, json_mode, timeout)
+    except LLMError as e:
+        fallback = _env("LLM_FALLBACK_MODEL")
+        timed_out = isinstance(e.__cause__, httpx.TimeoutException)
+        if not fallback or fallback == primary or not (e.status in FALLBACK_STATUS or timed_out):
+            raise
+        log.info("LLM %s failed (%s); retrying once with %s", primary, e.status or "timeout", fallback)
+        return await _complete(fallback, messages, temperature, json_mode, timeout)
+
+
+async def _complete(model: str, messages: list[dict], temperature: float, json_mode: bool, timeout: float) -> str:
     key, base = _env("LLM_API_KEY"), _env("LLM_BASE_URL").rstrip("/")
-    body: dict = {"model": _env("LLM_MODEL"), "messages": messages, "temperature": temperature}
+    body: dict = {"model": model, "messages": messages, "temperature": temperature}
     if json_mode:
         body["response_format"] = {"type": "json_object"}
     try:
