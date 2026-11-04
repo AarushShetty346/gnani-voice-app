@@ -2,90 +2,252 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gnani Voice App</title>
-<style>
-  :root { --bg:#0f1115; --card:#191c23; --text:#eef0f4; --muted:#9aa1ad; --accent:#ff7a3d; }
-  * { box-sizing:border-box; }
-  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text);
-         display:flex; justify-content:center; padding:32px 16px; }
-  main { width:100%; max-width:560px; }
-  h1 { font-size:22px; margin:0 0 4px; }
-  .muted { color:var(--muted); font-size:14px; }
-  .row { display:flex; gap:8px; margin:20px 0; }
-  select { flex:1; padding:10px; border-radius:10px; background:var(--card); color:var(--text); border:1px solid #2a2f3a; }
-  #mic { width:100%; padding:22px; font-size:18px; border:0; border-radius:16px; cursor:pointer;
-         background:var(--accent); color:#fff; font-weight:600; user-select:none; }
-  #mic.rec { background:#d93636; }
-  .bubble { background:var(--card); border-radius:14px; padding:14px; margin:12px 0; line-height:1.5; }
-  .bubble b { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; font-weight:500; }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Scam Kavach</title>
+<meta name="description" content="Live scam-call shield. Put a suspicious call on speaker; Kavach listens in 10 Indian languages and warns you out loud.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f2f4f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%231f3fbf' d='M12 1.8 20.4 5v6.6c0 5.2-3.5 9.3-8.4 10.7-4.9-1.4-8.4-5.5-8.4-10.7V5z'/%3E%3Cpath stroke='%23fff' stroke-width='2' stroke-linecap='round' d='M9 10v3.5M12 8.5v6.5M15 10v3.5'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Latin:wght@500..800&family=Anek+Devanagari:wght@500..800&family=Noto+Sans:wght@400..700&family=Noto+Sans+Devanagari:wght@400..700&family=Noto+Sans+Bengali:wght@400..700&family=Noto+Sans+Gujarati:wght@400..700&family=Noto+Sans+Gurmukhi:wght@400..700&family=Noto+Sans+Kannada:wght@400..700&family=Noto+Sans+Malayalam:wght@400..700&family=Noto+Sans+Tamil:wght@400..700&family=Noto+Sans+Telugu:wght@400..700&display=swap">
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<main>
-  <h1>Gnani Voice App</h1>
-  <div class="muted" id="status">checking…</div>
-  <div class="row">
-    <select id="language">
-      <option value="indic-auto">Auto-detect language</option>
-      <option value="hi-IN,en-IN">Hindi + English (Hinglish)</option>
-      <option value="kn-IN">Kannada</option><option value="ta-IN">Tamil</option>
-      <option value="te-IN">Telugu</option><option value="mr-IN">Marathi</option>
-      <option value="bn-IN">Bengali</option><option value="ml-IN">Malayalam</option>
-    </select>
-    <select id="voice">
-      <option>Shivani</option><option>Lakshmi</option><option>Chetana</option>
-      <option>Avinash</option><option>Devansh</option><option>Yashraj</option>
-    </select>
+<!-- Icon sprite (simple stroke glyphs, inline because the app ships with no JS/icon libraries) -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 24 24">
+    <path style="fill:currentColor;stroke:none" d="M12 1.8 20.4 5v6.6c0 5.2-3.5 9.3-8.4 10.7-4.9-1.4-8.4-5.5-8.4-10.7V5z"/>
+    <path style="stroke:var(--on-brand);stroke-width:2;fill:none;stroke-linecap:round" d="M9 10v3.5M12 8.5v6.5M15 10v3.5"/>
+  </symbol>
+  <symbol id="i-shield-alert" viewBox="0 0 24 24">
+    <path d="M12 2.8 19.5 5.6v5.9c0 4.7-3.1 8.4-7.5 9.7-4.4-1.3-7.5-5-7.5-9.7V5.6z"/><path d="M12 8v5M12 16.3v.01"/>
+  </symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8.5 21h7"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2.5" style="fill:currentColor;stroke:none"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.2v13.6L19 12z" style="fill:currentColor;stroke-linejoin:round"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15.5V4M7 8.5 12 4l5 4.5M4.5 15v3.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V15"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 4.3 2.6 17.6A2 2 0 0 0 4.3 20.6h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4M12 17v.01"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 20.5l1.3-4A8.3 8.3 0 1 1 8.4 19.3z"/><path d="M9 10.5h6M9 13.5h4"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></symbol>
+  <symbol id="i-replay" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9"/><path d="M4.5 4.5V9H9"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-phone-off" viewBox="0 0 24 24"><path d="M4 15.5c4.6-4 11.4-4 16 0l-1.6 2.6a1.2 1.2 0 0 1-1.5.5l-2.6-1.1a1.2 1.2 0 0 1-.7-1.1v-1.6a10 10 0 0 0-3.2 0v1.6a1.2 1.2 0 0 1-.7 1.1l-2.6 1.1a1.2 1.2 0 0 1-1.5-.5z"/></symbol>
+</svg>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>
+      <div class="brand-text">
+        <h1>Scam Kavach</h1>
+        <span class="brand-sub" lang="hi">स्कैम कवच</span>
+      </div>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite">
+      <span class="pill pill-wait">Checking server…</span>
+    </p>
+  </header>
+
+  <main class="layout">
+    <section class="control" aria-label="Choose how to check a call">
+      <div class="hero" id="hero">
+        <div class="hero-inner">
+          <p class="tagline">Suspicious call? Put it on speaker. <strong>Kavach listens and warns you.</strong></p>
+          <p class="tagline-hi" lang="hi">शक वाली कॉल? स्पीकर पर डालिए। कवच सुनेगा और आपको समय रहते सावधान करेगा।</p>
+        </div>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Mode">
+        <button class="tab" role="tab" id="tab-live" aria-controls="panel-live" aria-selected="true" data-tab="live">
+          <svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg><span>Live call</span>
+        </button>
+        <button class="tab" role="tab" id="tab-demo" aria-controls="panel-demo" aria-selected="false" tabindex="-1" data-tab="demo">
+          <svg class="ic" aria-hidden="true"><use href="#i-play"/></svg><span>Demo calls</span>
+        </button>
+        <button class="tab" role="tab" id="tab-file" aria-controls="panel-file" aria-selected="false" tabindex="-1" data-tab="file">
+          <svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg><span>Recording</span>
+        </button>
+      </div>
+
+      <div class="warn-row">
+        <label for="warnLang">Warn me in <span class="hi" lang="hi">चेतावनी की भाषा</span></label>
+        <div class="select-wrap">
+          <select id="warnLang">
+            <option value="auto">Auto (call language)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Live call -->
+      <div class="panel" id="panel-live" role="tabpanel" aria-labelledby="tab-live">
+        <button class="listen" id="listenBtn" type="button">
+          <span class="listen-rings" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="listen-core">
+            <svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg>
+            <span class="listen-label">Start listening</span>
+            <span class="listen-label-hi" lang="hi">सुनना शुरू करें</span>
+          </span>
+        </button>
+        <p class="hint" id="liveHint">Put the call on speaker and keep this phone close to it.</p>
+      </div>
+
+      <!-- Demo calls -->
+      <div class="panel" id="panel-demo" role="tabpanel" aria-labelledby="tab-demo" hidden>
+        <p class="panel-intro">Scripted sample calls in Indian languages. All names and numbers are made up.</p>
+        <ul class="demo-list" id="demoList" aria-busy="true">
+          <li class="demo-card skeleton" aria-hidden="true"></li>
+          <li class="demo-card skeleton" aria-hidden="true"></li>
+          <li class="demo-card skeleton" aria-hidden="true"></li>
+        </ul>
+      </div>
+
+      <!-- Check a recording -->
+      <div class="panel" id="panel-file" role="tabpanel" aria-labelledby="tab-file" hidden>
+        <label class="drop" id="dropZone" for="fileInput">
+          <svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg>
+          <span class="drop-title" id="dropTitle">Choose a call recording</span>
+          <span class="drop-sub" id="dropSub">WAV, MP3, M4A, OGG or WebM, up to 10 minutes</span>
+          <input type="file" id="fileInput" class="sr-only" accept="audio/*,video/webm,video/mp4,.wav,.mp3,.m4a,.aac,.ogg,.opus,.oga,.webm,.amr,.3gp,.flac">
+        </label>
+        <button class="btn btn-primary btn-block" id="analyzeBtn" type="button" disabled>
+          <span id="analyzeLabel">Check this recording</span>
+        </button>
+      </div>
+
+      <!-- Active session strip (replaces the panels while a call is being checked) -->
+      <div class="session" id="sessionBar" hidden>
+        <div class="session-row">
+          <div class="session-state">
+            <span class="live-dot" aria-hidden="true"></span>
+            <div class="session-text">
+              <span class="session-title" id="sessionTitle">Connecting…</span>
+              <span class="session-meta" id="sessionMeta"></span>
+            </div>
+          </div>
+          <span class="vu" id="vu" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          <span class="clock" id="clock" aria-label="Elapsed time">0:00</span>
+          <button class="btn btn-stop" id="stopBtn" type="button">
+            <svg class="ic" aria-hidden="true"><use href="#i-stop"/></svg><span>Stop</span>
+          </button>
+        </div>
+        <div class="subtitle" id="subtitle" hidden>
+          <span class="subtitle-who" id="subtitleWho"></span>
+          <p class="subtitle-text" id="subtitleText"></p>
+          <span class="subtitle-progress" aria-hidden="true"><i id="subtitleBar"></i></span>
+        </div>
+      </div>
+
+      <div class="notice" id="notice" role="alert" hidden>
+        <svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg>
+        <p id="noticeText"></p>
+        <button class="icon-btn" id="noticeClose" type="button" aria-label="Dismiss message">
+          <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <section class="monitor" aria-label="Call monitor">
+      <div class="meter" id="meter" data-level="idle">
+        <div class="gauge">
+          <svg viewBox="0 0 200 112" aria-hidden="true" focusable="false">
+            <path class="zone zone-safe" pathLength="100" d="M18 100a82 82 0 0 1 164 0"/>
+            <path class="zone zone-caution" pathLength="100" d="M18 100a82 82 0 0 1 164 0"/>
+            <path class="zone zone-danger" pathLength="100" d="M18 100a82 82 0 0 1 164 0"/>
+            <path class="fill" id="gaugeFill" pathLength="100" d="M18 100a82 82 0 0 1 164 0"/>
+            <line class="needle" id="needle" x1="100" y1="100" x2="100" y2="34"/>
+            <circle class="hub" cx="100" cy="100" r="7"/>
+          </svg>
+        </div>
+        <div class="meter-info">
+          <div class="score-line" role="meter" id="riskMeter" aria-label="Scam risk" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Not listening">
+            <span class="score" id="score">0</span><span class="score-max">/100</span>
+          </div>
+          <p class="level" id="levelLabel" aria-live="polite">Not listening</p>
+          <p class="level-hi" id="levelLabelHi" lang="hi">अभी सुन नहीं रहा</p>
+        </div>
+        <p class="reason" id="reason" hidden></p>
+        <ul class="chips" id="chips" aria-label="Warning signs found"></ul>
+      </div>
+
+      <div class="transcript-head">
+        <h2>Transcript <span class="hi" lang="hi">बातचीत</span></h2>
+        <span class="legend"><mark class="flag legend-mark">risky phrase</mark></span>
+      </div>
+      <ol class="transcript" id="transcript" aria-live="polite" aria-relevant="additions text" aria-label="Live transcript">
+        <li class="empty" id="emptyState">
+          <svg class="ic" aria-hidden="true"><use href="#i-shield-alert"/></svg>
+          <p>Start listening, play a demo call or check a recording. Risky phrases get highlighted here.</p>
+          <p class="hi" lang="hi">खतरे वाले शब्द यहाँ लाल रंग में दिखेंगे।</p>
+        </li>
+      </ol>
+
+      <section class="summary" id="summary" hidden aria-labelledby="summaryHeading" tabindex="-1">
+        <div class="summary-top">
+          <h2 id="summaryHeading">After the call <span class="hi" lang="hi">कॉल के बाद</span></h2>
+          <span class="verdict" id="verdict"></span>
+        </div>
+        <p class="summary-score" id="summaryScore"></p>
+        <ul class="chips" id="summaryChips" aria-label="Warning signs"></ul>
+        <p class="summary-text" id="summaryText"></p>
+        <h3 class="advice-head">What to do <span class="hi" lang="hi">अब क्या करें</span></h3>
+        <ol class="advice" id="advice"></ol>
+        <div class="share">
+          <a class="btn btn-whatsapp" id="shareWa" href="#" target="_blank" rel="noopener noreferrer">
+            <svg class="ic" aria-hidden="true"><use href="#i-chat"/></svg><span>Share on WhatsApp</span>
+          </a>
+          <button class="btn btn-ghost" id="copyBtn" type="button">
+            <svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span id="copyLabel">Copy</span>
+          </button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>Speech by Gnani Prisma v3.0, warnings voiced by Timbre v3.0. Demo calls are synthetic.</p>
+    <p lang="hi">बैंक, पुलिस या सरकार कभी फ़ोन पर OTP, PIN या पैसे नहीं माँगते।</p>
+  </footer>
+</div>
+
+<!-- Caution banner -->
+<div class="banner" id="cautionBanner" role="alert" aria-live="assertive" hidden>
+  <svg class="ic banner-ic" aria-hidden="true"><use href="#i-alert"/></svg>
+  <div class="banner-body">
+    <p class="banner-title"><span>Be careful</span> <span lang="hi">सावधान</span> <span class="banner-cat" id="bannerCat"></span></p>
+    <p class="banner-text" id="bannerText"></p>
   </div>
-  <button id="mic">Hold to talk</button>
-  <div id="log"></div>
-</main>
-<script>
-const $ = id => document.getElementById(id);
-fetch('/api/status').then(r => r.json()).then(s => {
-  $('status').textContent = `Gnani: ${s.gnani_mock ? 'MOCK (no key)' : 'live'} · LLM: ${s.llm_mock ? 'MOCK (no key)' : 'live'}`;
-});
+  <button class="icon-btn" id="bannerClose" type="button" aria-label="Dismiss warning">
+    <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
+  </button>
+</div>
 
-let rec, chunks = [];
-async function start() {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  rec = new MediaRecorder(stream);
-  chunks = [];
-  rec.ondataavailable = e => chunks.push(e.data);
-  rec.onstop = send;
-  rec.start();
-  $('mic').classList.add('rec'); $('mic').textContent = 'Listening… release to send';
-  setTimeout(() => rec && rec.state === 'recording' && rec.stop(), 29000); // REST limit is 30 s
-}
-function stop() { if (rec && rec.state === 'recording') rec.stop(); }
+<!-- Full-screen danger alert -->
+<div class="alarm" id="dangerOverlay" role="alertdialog" aria-modal="true" aria-labelledby="alarmTitle" aria-describedby="alarmText" hidden>
+  <div class="alarm-inner">
+    <div class="alarm-icon" aria-hidden="true">
+      <span class="alarm-pulse"></span>
+      <svg class="ic"><use href="#i-shield-alert"/></svg>
+    </div>
+    <h2 class="alarm-title" id="alarmTitle"><span>Scam alert</span> <span lang="hi">धोखे का ख़तरा</span></h2>
+    <p class="alarm-cat" id="alarmCat"></p>
+    <p class="alarm-text" id="alarmText"></p>
+    <p class="alarm-hint">Do not share OTP, PIN, card details or money. Hang up and call the official number yourself.</p>
+    <div class="alarm-actions">
+      <button class="btn btn-alarm" id="alarmOk" type="button">
+        <svg class="ic" aria-hidden="true"><use href="#i-phone-off"/></svg><span>Got it, I'll hang up</span>
+      </button>
+      <button class="btn btn-alarm-ghost" id="alarmReplay" type="button">
+        <svg class="ic" aria-hidden="true"><use href="#i-replay"/></svg><span>Hear it again</span>
+      </button>
+    </div>
+  </div>
+</div>
 
-async function send() {
-  rec.stream.getTracks().forEach(t => t.stop());
-  $('mic').classList.remove('rec'); $('mic').textContent = 'Thinking…';
-  const fd = new FormData();
-  fd.append('audio', new Blob(chunks, { type: rec.mimeType }), 'clip.webm');
-  fd.append('language', $('language').value);
-  fd.append('voice', $('voice').value);
-  try {
-    const r = await fetch('/api/talk', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || r.status);
-    add('You', `${d.transcript} <span class="muted">(${d.detected_language || '?'})</span>`);
-    add('Assistant', d.reply);
-    new Audio('data:audio/wav;base64,' + d.audio_b64).play();
-  } catch (e) { add('Error', e.message); }
-  $('mic').textContent = 'Hold to talk';
-}
-function add(who, html) {
-  const div = document.createElement('div');
-  div.className = 'bubble'; div.innerHTML = `<b>${who}</b>${html}`;
-  $('log').prepend(div);
-}
-const mic = $('mic');
-mic.addEventListener('pointerdown', start);
-mic.addEventListener('pointerup', stop);
-mic.addEventListener('pointerleave', stop);
-</script>
+<div class="sr-only" id="srAlert" aria-live="assertive" aria-atomic="true"></div>
+
+<script src="/static/app.js" defer></script>
 </body>
 </html>
