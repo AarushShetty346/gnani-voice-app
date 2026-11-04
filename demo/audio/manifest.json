@@ -1,0 +1,143 @@
+{
+ "digital-arrest": {
+  "duration_s": 39.74,
+  "lines": [
+   {
+    "offset_s": 1.6,
+    "end_s": 6.24
+   },
+   {
+    "offset_s": 7.04,
+    "end_s": 8.48
+   },
+   {
+    "offset_s": 9.28,
+    "end_s": 13.76
+   },
+   {
+    "offset_s": 14.56,
+    "end_s": 17.04
+   },
+   {
+    "offset_s": 17.84,
+    "end_s": 24.96
+   },
+   {
+    "offset_s": 25.76,
+    "end_s": 28.32
+   },
+   {
+    "offset_s": 29.12,
+    "end_s": 37.44
+   }
+  ]
+ },
+ "bank-kyc-otp": {
+  "duration_s": 34.78,
+  "lines": [
+   {
+    "offset_s": 1.6,
+    "end_s": 5.84
+   },
+   {
+    "offset_s": 6.64,
+    "end_s": 8.64
+   },
+   {
+    "offset_s": 9.44,
+    "end_s": 16.64
+   },
+   {
+    "offset_s": 17.44,
+    "end_s": 19.6
+   },
+   {
+    "offset_s": 20.4,
+    "end_s": 26.4
+   },
+   {
+    "offset_s": 27.2,
+    "end_s": 32.48
+   }
+  ]
+ },
+ "electricity-anydesk": {
+  "duration_s": 30.54,
+  "lines": [
+   {
+    "offset_s": 1.6,
+    "end_s": 5.52
+   },
+   {
+    "offset_s": 6.32,
+    "end_s": 7.68
+   },
+   {
+    "offset_s": 8.48,
+    "end_s": 14.96
+   },
+   {
+    "offset_s": 15.76,
+    "end_s": 17.52
+   },
+   {
+    "offset_s": 18.32,
+    "end_s": 23.44
+   },
+   {
+    "offset_s": 24.24,
+    "end_s": 28.24
+   }
+  ]
+ },
+ "task-job-tamil": {
+  "duration_s": 25.26,
+  "lines": [
+   {
+    "offset_s": 1.6,
+    "end_s": 5.36
+   },
+   {
+    "offset_s": 6.16,
+    "end_s": 6.8
+   },
+   {
+    "offset_s": 7.6,
+    "end_s": 13.04
+   },
+   {
+    "offset_s": 13.84,
+    "end_s": 15.92
+   },
+   {
+    "offset_s": 16.72,
+    "end_s": 22.96
+   }
+  ]
+ },
+ "legit-bank-reminder": {
+  "duration_s": 24.94,
+  "lines": [
+   {
+    "offset_s": 1.6,
+    "end_s": 5.2
+   },
+   {
+    "offset_s": 6.0,
+    "end_s": 7.28
+   },
+   {
+    "offset_s": 8.08,
+    "end_s": 13.68
+   },
+   {
+    "offset_s": 14.48,
+    "end_s": 15.76
+   },
+   {
+    "offset_s": 16.56,
+    "end_s": 22.64
+   }
+  ]
+ }
+}

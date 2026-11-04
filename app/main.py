@@ -1,60 +1,182 @@
-"""FastAPI app: mic audio in -> Prisma STT -> LLM -> Timbre TTS -> audio out.
+"""Scam Kavach web app: live call shield (WS /ws/listen), demo calls, and "check a recording".
 
-Run:  .venv\\Scripts\\python -m uvicorn app.main:app --reload
+Run:  .venv\\Scripts\\python -m uvicorn app.main:app --port 8000
 Open: http://localhost:8000
 """
-import base64
-import subprocess
-from pathlib import Path
+from __future__ import annotations
 
-from dotenv import load_dotenv
+import asyncio
+import logging
+import re
+from dataclasses import asdict
 
-load_dotenv()
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile  # noqa: E402
-from fastapi.responses import FileResponse  # noqa: E402
-from fastapi.staticfiles import StaticFiles  # noqa: E402
+from app import audio, config, gnani, llm
+from app.detector import CallMonitor
+from app.gnani_stream import line_timings
+from app.session import (MIC_MOCK_DEMO, ListenSession, find_demo, parse_stt_language, parse_warn_language,
+                         safe_summary)
 
-from app import gnani, llm  # noqa: E402
+log = logging.getLogger(__name__)
 
-ROOT = Path(__file__).resolve().parent.parent
-app = FastAPI(title="Gnani voice app")
-app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024   # /api/analyze upload limit
+MAX_DURATION_S = 10 * 60              # longer recordings would burn too many STT credits
+CHUNK_S = 25.0                        # Prisma REST takes <= 30 s per request
+LLM_REVIEW_TIMEOUT_S = 25.0
 
+STATIC_DIR = config.ROOT / "static"
 
-def to_wav16k(raw: bytes) -> bytes:
-    """Browsers record webm/opus, which Prisma's REST API doesn't take. Convert with ffmpeg."""
-    p = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
-         "-ac", "1", "-ar", "16000", "-f", "wav", "pipe:1"],
-        input=raw, capture_output=True)
-    if p.returncode != 0:
-        raise HTTPException(400, f"ffmpeg could not read the audio: {p.stderr.decode()[:200]}")
-    return p.stdout
+app = FastAPI(title="Scam Kavach", docs_url=None, redoc_url=None)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-@app.get("/")
+def _demo_audio_path(demo_id: str):
+    return config.DEMO_DIR / "audio" / f"{demo_id}.wav"
+
+
+@app.get("/", include_in_schema=False)
 def index():
-    return FileResponse(ROOT / "static" / "index.html")
+    return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.api_route("/demo-audio/{name}", methods=["GET", "HEAD"], include_in_schema=False)
+def demo_audio(name: str):
+    """Only <id>.wav for ids in demo/scripts.json; the path is built from the id, never from user input."""
+    demo = find_demo(name[:-4]) if name.endswith(".wav") else None
+    path = _demo_audio_path(demo["id"]) if demo else None
+    if path is None or not path.is_file():
+        raise HTTPException(404, "No such demo audio.")
+    return FileResponse(path, media_type="audio/wav")
 
 
 @app.get("/api/status")
 def status():
-    return {"gnani_mock": gnani.mock_mode(), "llm_mock": llm.mock_mode()}
+    demos = config.load_demos()
+    return {"gnani_mock": config.gnani_mock(), "llm_mock": not llm.configured(),
+            "demo_audio": bool(demos) and all(_demo_audio_path(d["id"]).is_file() for d in demos),
+            "languages": config.LANGUAGES}
 
 
-@app.post("/api/talk")
-async def talk(audio: UploadFile = File(...), language: str = Form("indic-auto"),
-               voice: str = Form("Shivani")):
-    wav = to_wav16k(await audio.read())
-    heard = gnani.stt(wav, "clip.wav", language=language)
-    text = heard.get("transcript", "")
-    answer = llm.reply(text) if text else "Maaf kijiye, kuch sunai nahi diya."
-    speech = gnani.tts(answer, voice=voice)
-    return {
-        "transcript": text,
-        "detected_language": heard.get("detected_language_code"),
-        "reply": answer,
-        "audio_b64": base64.b64encode(speech).decode(),
-        "mock": {"gnani": gnani.mock_mode(), "llm": llm.mock_mode()},
-    }
+@app.get("/api/demos")
+def demos():
+    out = []
+    for d in config.load_demos():
+        timings = line_timings(d)
+        out.append({
+            "id": d["id"], "title": d["title"], "title_native": d.get("title_native") or d["title"],
+            "language": d["language"], "label": d["label"], "categories": d.get("categories", []),
+            "has_audio": _demo_audio_path(d["id"]).is_file(),
+            "lines": [{"speaker": line["speaker"], "text": line["text"], "offset_s": start, "end_s": end}
+                      for line, (start, end) in zip(d["lines"], timings)],
+        })
+    return out
+
+
+_SENTENCE_END = re.compile(r"(?<=[.!?।॥])\s+")
+
+
+def _sentences(text: str) -> list[tuple[int, str]]:
+    """(char_offset, sentence) pieces of one chunk transcript, so the UI shows readable bubbles."""
+    out, pos = [], 0
+    for piece in _SENTENCE_END.split(text):
+        idx = text.find(piece, pos)
+        if piece.strip():
+            out.append((max(idx, 0), piece.strip()))
+        pos = max(idx, 0) + len(piece)
+    return out
+
+
+async def _read_upload(upload: UploadFile) -> bytes:
+    raw = await upload.read(MAX_UPLOAD_BYTES + 1)
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"The file is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB.")
+    if not raw:
+        raise HTTPException(400, "The file is empty.")
+    return raw
+
+
+async def _transcribe(wav: bytes, language: str) -> list[tuple[float, str, str | None]]:
+    """Live mode: <= 25 s chunks, one REST STT call each, strictly one after another."""
+    chunks = await asyncio.to_thread(audio.split_wav, wav, CHUNK_S)
+    rows = []
+    for i, (start, chunk) in enumerate(chunks):
+        try:
+            res = await gnani.stt(chunk, f"chunk-{i}.wav", language=language, fmt="codemix",
+                                  keyterms=list(config.SCAM_KEYTERMS))
+        except gnani.GnaniError as e:
+            raise HTTPException(502, f"Gnani speech-to-text failed: {e.message}") from e
+        text = str(res.get("transcript") or "").strip()
+        if not text:
+            continue
+        span = await asyncio.to_thread(audio.duration_s, chunk)
+        lang = res.get("detected_language_code")
+        for off, sentence in _sentences(text):
+            rows.append((start + span * off / len(text), sentence, lang))
+    return rows
+
+
+def _mock_rows() -> list[tuple[float, str, str | None]]:
+    demo = find_demo(MIC_MOCK_DEMO)
+    return [(start, line["text"], demo["language"]) for line, (start, _) in zip(demo["lines"], line_timings(demo))]
+
+
+@app.post("/api/analyze")
+async def analyze(audio_file: UploadFile = File(..., alias="audio"), language: str = Form("indic-auto"),
+                  warn_language: str = Form("auto")):
+    stt_lang = parse_stt_language(language)
+    if stt_lang is None:
+        raise HTTPException(400, "language must be 'indic-auto' or 1-4 codes like 'hi-IN,en-IN'.")
+    warn = parse_warn_language(warn_language)
+    raw = await _read_upload(audio_file)
+    try:
+        wav = await asyncio.to_thread(audio.to_wav, raw, 16000)
+        duration = await asyncio.to_thread(audio.duration_s, wav)
+    except audio.AudioError as e:
+        raise HTTPException(400, "Could not read this audio file. Try MP3, M4A, WAV, OGG or WebM.") from e
+    if duration < 0.1:
+        raise HTTPException(400, "The recording has no audio.")
+    if duration > MAX_DURATION_S:
+        raise HTTPException(400, f"The recording is {duration / 60:.1f} minutes long; the limit is "
+                                 f"{MAX_DURATION_S // 60} minutes.")
+
+    rows = _mock_rows() if config.gnani_mock() else await _transcribe(wav, stt_lang)
+    monitor = CallMonitor()
+    transcript = []
+    for start_s, text, lang in rows:
+        monitor.add(text, lang)
+        transcript.append({**monitor.transcript[-1], "start_s": round(start_s, 2)})
+    if transcript and llm.configured():
+        try:
+            await asyncio.wait_for(monitor.llm_review(), LLM_REVIEW_TIMEOUT_S)
+        except Exception as e:  # noqa: BLE001 - rules result stands
+            log.warning("LLM review failed: %s", type(e).__name__)
+    result = await safe_summary(monitor, warn)
+    return {"transcript": transcript, "risk": asdict(monitor.assessment), "summary": result,
+            "duration_s": round(duration, 2), "mock": config.gnani_mock()}
+
+
+@app.websocket("/ws/listen")
+async def ws_listen(ws: WebSocket):
+    await ws.accept()
+
+    async def receive():
+        try:
+            msg = await ws.receive()
+        except (WebSocketDisconnect, RuntimeError):
+            return None
+        if msg.get("type") == "websocket.disconnect":
+            return None
+        if msg.get("bytes") is not None:
+            return msg["bytes"]
+        return msg.get("text") or ""
+
+    session = ListenSession(ws.send_json)
+    await session.run(receive)
+    if not session.closed:
+        try:
+            await ws.close()
+        except Exception:  # noqa: BLE001
+            pass

@@ -4,3 +4,5 @@ __pycache__/
 .env
 *.wav
 !static/*.wav
+!demo/audio/*.wav
+.cache/

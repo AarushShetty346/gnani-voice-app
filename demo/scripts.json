@@ -1,0 +1,89 @@
+{
+  "_note": "Synthetic demo calls. All names, numbers and organisations are made up. Contest rule: synthetic data only.",
+  "demos": [
+    {
+      "id": "digital-arrest",
+      "title": "\"Digital arrest\" by fake cyber police",
+      "title_native": "फ़र्ज़ी पुलिस का 'डिजिटल अरेस्ट'",
+      "language": "hi-IN",
+      "label": "scam",
+      "categories": ["impersonation", "digital_arrest", "urgency_secrecy", "payment_request"],
+      "voices": {"caller": "Harshad", "victim": "Chetana"},
+      "lines": [
+        {"speaker": "caller", "text": "हेलो, मैं मुंबई साइबर क्राइम ब्रांच से इंस्पेक्टर राजेश शर्मा बोल रहा हूँ।"},
+        {"speaker": "victim", "text": "जी, बोलिए?"},
+        {"speaker": "caller", "text": "आपके Aadhaar card से एक parcel book हुआ है, जिसमें customs को drugs मिले हैं।"},
+        {"speaker": "victim", "text": "क्या? मैंने तो कोई parcel नहीं भेजा!"},
+        {"speaker": "caller", "text": "आपके नाम पर arrest warrant निकला है। अभी से आप digital arrest में हैं। Call disconnect मत कीजिए और किसी को मत बताइए।"},
+        {"speaker": "victim", "text": "मैं क्या करूँ? मुझे बहुत डर लग रहा है।"},
+        {"speaker": "caller", "text": "Case clear करने के लिए अपने account का पूरा पैसा RBI के safe account में transfer करना होगा। Verification के बाद वापस मिल जाएगा।"}
+      ]
+    },
+    {
+      "id": "bank-kyc-otp",
+      "title": "Fake bank KYC call asking for OTP",
+      "title_native": "Fake bank KYC call asking for OTP",
+      "language": "en-IN",
+      "label": "scam",
+      "categories": ["impersonation", "account_threat", "otp_request", "urgency_secrecy"],
+      "voices": {"caller": "Avinash", "victim": "Kalpana"},
+      "lines": [
+        {"speaker": "caller", "text": "Good afternoon ma'am, I am calling from the KYC department of your bank."},
+        {"speaker": "victim", "text": "Yes, what is it about?"},
+        {"speaker": "caller", "text": "Your KYC has expired. If you do not update it in the next two hours, your account will be blocked permanently."},
+        {"speaker": "victim", "text": "Oh no. How do I update it?"},
+        {"speaker": "caller", "text": "I have just sent a six digit OTP to your mobile. Please read it out to me so I can verify your account."},
+        {"speaker": "caller", "text": "Also confirm your debit card number and expiry date. Please hurry ma'am, this is very urgent."}
+      ]
+    },
+    {
+      "id": "electricity-anydesk",
+      "title": "Power cut threat + remote-access app (Kannada)",
+      "title_native": "ವಿದ್ಯುತ್ ಕಡಿತದ ಬೆದರಿಕೆ + ಎನಿಡೆಸ್ಕ್",
+      "language": "kn-IN",
+      "label": "scam",
+      "categories": ["impersonation", "account_threat", "remote_access", "payment_request", "otp_request"],
+      "voices": {"caller": "Prakash", "victim": "Lakshmi"},
+      "lines": [
+        {"speaker": "caller", "text": "ನಮಸ್ಕಾರ, ನಾನು ವಿದ್ಯುತ್ ಇಲಾಖೆಯಿಂದ ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ."},
+        {"speaker": "victim", "text": "ಹೌದು, ಹೇಳಿ."},
+        {"speaker": "caller", "text": "ನಿಮ್ಮ ಕಳೆದ ತಿಂಗಳ ಬಿಲ್ ಬಾಕಿ ಇದೆ. ಇಂದು ರಾತ್ರಿ ಒಂಬತ್ತು ಗಂಟೆಗೆ ನಿಮ್ಮ ಮನೆಯ ವಿದ್ಯುತ್ ಸಂಪರ್ಕ ಕಡಿತಗೊಳ್ಳುತ್ತದೆ."},
+        {"speaker": "victim", "text": "ಆದರೆ ನಾನು ಬಿಲ್ ಕಟ್ಟಿದ್ದೇನೆ."},
+        {"speaker": "caller", "text": "ಅದು ಇನ್ನೂ ಅಪ್‌ಡೇಟ್ ಆಗಿಲ್ಲ. ತಕ್ಷಣ ಎನಿಡೆಸ್ಕ್ ಆಪ್ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ, ನಾನು ಅಪ್‌ಡೇಟ್ ಮಾಡುತ್ತೇನೆ."},
+        {"speaker": "caller", "text": "ಹತ್ತು ರೂಪಾಯಿ ಪಾವತಿ ಮಾಡಿ, ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಬರುವ ಓಟಿಪಿ ನನಗೆ ಹೇಳಿ."}
+      ]
+    },
+    {
+      "id": "task-job-tamil",
+      "title": "Work-from-home \"like videos\" job scam (Tamil)",
+      "title_native": "வீட்டிலிருந்து வேலை மோசடி",
+      "language": "ta-IN",
+      "label": "scam",
+      "categories": ["prize_job_offer", "payment_request", "urgency_secrecy"],
+      "voices": {"caller": "Devansh", "victim": "Vasudha"},
+      "lines": [
+        {"speaker": "caller", "text": "வணக்கம், நான் ஒரு ஆன்லைன் வேலை வாய்ப்பு நிறுவனத்திலிருந்து பேசுகிறேன்."},
+        {"speaker": "victim", "text": "சொல்லுங்க."},
+        {"speaker": "caller", "text": "வீட்டிலிருந்தே யூடியூப் வீடியோக்களை லைக் செய்தால் தினமும் ஐந்தாயிரம் ரூபாய் சம்பாதிக்கலாம்."},
+        {"speaker": "victim", "text": "உண்மையாவா? நான் என்ன செய்யணும்?"},
+        {"speaker": "caller", "text": "முதலில் பதிவுக் கட்டணமாக ஆயிரம் ரூபாய் யுபிஐ மூலம் அனுப்புங்கள். இந்த ஆஃபர் இன்று மட்டும்தான்."}
+      ]
+    },
+    {
+      "id": "legit-bank-reminder",
+      "title": "Genuine bill reminder (should stay SAFE)",
+      "title_native": "असली बैंक रिमाइंडर कॉल",
+      "language": "hi-IN",
+      "label": "legit",
+      "categories": [],
+      "voices": {"caller": "Shivani", "victim": "Yashraj"},
+      "lines": [
+        {"speaker": "caller", "text": "नमस्ते, मैं आपके बैंक से एक reminder call कर रही हूँ।"},
+        {"speaker": "victim", "text": "जी, बताइए।"},
+        {"speaker": "caller", "text": "आपके credit card का bill पाँच तारीख को due है। आप app या branch से payment कर सकते हैं।"},
+        {"speaker": "victim", "text": "ठीक है, धन्यवाद।"},
+        {"speaker": "caller", "text": "ध्यान रखिए, बैंक कभी भी फ़ोन पर OTP या PIN नहीं माँगता। आपका दिन शुभ हो।"}
+      ]
+    }
+  ]
+}
