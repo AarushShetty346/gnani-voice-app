@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gnani Voice App</title>
+<style>
+  :root { --bg:#0f1115; --card:#191c23; --text:#eef0f4; --muted:#9aa1ad; --accent:#ff7a3d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text);
+         display:flex; justify-content:center; padding:32px 16px; }
+  main { width:100%; max-width:560px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .muted { color:var(--muted); font-size:14px; }
+  .row { display:flex; gap:8px; margin:20px 0; }
+  select { flex:1; padding:10px; border-radius:10px; background:var(--card); color:var(--text); border:1px solid #2a2f3a; }
+  #mic { width:100%; padding:22px; font-size:18px; border:0; border-radius:16px; cursor:pointer;
+         background:var(--accent); color:#fff; font-weight:600; user-select:none; }
+  #mic.rec { background:#d93636; }
+  .bubble { background:var(--card); border-radius:14px; padding:14px; margin:12px 0; line-height:1.5; }
+  .bubble b { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; font-weight:500; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Gnani Voice App</h1>
+  <div class="muted" id="status">checking…</div>
+  <div class="row">
+    <select id="language">
+      <option value="indic-auto">Auto-detect language</option>
+      <option value="hi-IN,en-IN">Hindi + English (Hinglish)</option>
+      <option value="kn-IN">Kannada</option><option value="ta-IN">Tamil</option>
+      <option value="te-IN">Telugu</option><option value="mr-IN">Marathi</option>
+      <option value="bn-IN">Bengali</option><option value="ml-IN">Malayalam</option>
+    </select>
+    <select id="voice">
+      <option>Shivani</option><option>Lakshmi</option><option>Chetana</option>
+      <option>Avinash</option><option>Devansh</option><option>Yashraj</option>
+    </select>
+  </div>
+  <button id="mic">Hold to talk</button>
+  <div id="log"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+fetch('/api/status').then(r => r.json()).then(s => {
+  $('status').textContent = `Gnani: ${s.gnani_mock ? 'MOCK (no key)' : 'live'} · LLM: ${s.llm_mock ? 'MOCK (no key)' : 'live'}`;
+});
+
+let rec, chunks = [];
+async function start() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  rec = new MediaRecorder(stream);
+  chunks = [];
+  rec.ondataavailable = e => chunks.push(e.data);
+  rec.onstop = send;
+  rec.start();
+  $('mic').classList.add('rec'); $('mic').textContent = 'Listening… release to send';
+  setTimeout(() => rec && rec.state === 'recording' && rec.stop(), 29000); // REST limit is 30 s
+}
+function stop() { if (rec && rec.state === 'recording') rec.stop(); }
+
+async function send() {
+  rec.stream.getTracks().forEach(t => t.stop());
+  $('mic').classList.remove('rec'); $('mic').textContent = 'Thinking…';
+  const fd = new FormData();
+  fd.append('audio', new Blob(chunks, { type: rec.mimeType }), 'clip.webm');
+  fd.append('language', $('language').value);
+  fd.append('voice', $('voice').value);
+  try {
+    const r = await fetch('/api/talk', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.status);
+    add('You', `${d.transcript} <span class="muted">(${d.detected_language || '?'})</span>`);
+    add('Assistant', d.reply);
+    new Audio('data:audio/wav;base64,' + d.audio_b64).play();
+  } catch (e) { add('Error', e.message); }
+  $('mic').textContent = 'Hold to talk';
+}
+function add(who, html) {
+  const div = document.createElement('div');
+  div.className = 'bubble'; div.innerHTML = `<b>${who}</b>${html}`;
+  $('log').prepend(div);
+}
+const mic = $('mic');
+mic.addEventListener('pointerdown', start);
+mic.addEventListener('pointerup', stop);
+mic.addEventListener('pointerleave', stop);
+</script>
+</body>
+</html>
