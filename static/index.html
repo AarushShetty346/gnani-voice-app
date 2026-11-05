@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Scam Kavach</title>
-<meta name="description" content="Live scam-call shield. Put a suspicious call on speaker; Kavach listens in 10 Indian languages and warns you out loud.">
+<title>ScamLingo</title>
+<meta name="description" content="Live scam-call shield. Put a suspicious call on speaker; ScamLingo listens in 10 Indian languages and warns you out loud.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#f4f4f5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0a0a0b" media="(prefers-color-scheme: dark)">
@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Latin:wght@500..800&family=Anek+Devanagari:wght@500..800&family=Noto+Sans:wght@400..700&family=Noto+Sans+Devanagari:wght@400..700&family=Noto+Sans+Bengali:wght@400..700&family=Noto+Sans+Gujarati:wght@400..700&family=Noto+Sans+Gurmukhi:wght@400..700&family=Noto+Sans+Kannada:wght@400..700&family=Noto+Sans+Malayalam:wght@400..700&family=Noto+Sans+Tamil:wght@400..700&family=Noto+Sans+Telugu:wght@400..700&display=swap">
-<link rel="stylesheet" href="/static/style.css?v=5">
+<link rel="stylesheet" href="/static/style.css?v=8">
 </head>
 <body>
 <!-- Icon sprite (simple stroke glyphs, inline because the app ships with no JS/icon libraries) -->
@@ -42,7 +42,7 @@
     <div class="brand">
       <svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>
       <div class="brand-text">
-        <h1>Scam Kavach</h1>
+        <h1>ScamLingo</h1>
         <span class="brand-sub">Live scam-call shield</span>
       </div>
     </div>
@@ -55,8 +55,8 @@
     <section class="control" aria-label="Choose how to check a call">
       <div class="hero" id="hero">
         <div class="hero-inner">
-          <p class="tagline"><span>Suspicious call? Put it on speaker.</span> <strong>Kavach listens and warns you out loud.</strong></p>
-          <ul class="proof" aria-label="What Kavach does">
+          <p class="tagline"><span>Suspicious call? Put it on speaker.</span> <strong>ScamLingo listens and warns you out loud.</strong></p>
+          <ul class="proof" aria-label="What ScamLingo does">
             <li><b>10</b> Indian languages</li>
             <li><b>Spoken</b> warning in yours</li>
             <li><b>WhatsApp</b> summary after</li>
@@ -108,7 +108,7 @@
 
       <!-- Demo calls -->
       <div class="panel" id="panel-demo" role="tabpanel" aria-labelledby="tab-demo" hidden>
-        <p class="panel-intro">Real phone-quality audio of scripted calls. Some are scams, one is not. Can you tell before Kavach does? Names and numbers are made up.</p>
+        <p class="panel-intro">Real phone-quality audio of scripted calls. Some are scams, one is not. Can you tell before ScamLingo does? Names and numbers are made up.</p>
         <ul class="demo-list" id="demoList" aria-busy="true">
           <li class="demo-card skeleton" aria-hidden="true"></li>
           <li class="demo-card skeleton" aria-hidden="true"></li>
@@ -260,6 +260,7 @@
 
 <div class="sr-only" id="srAlert" aria-live="assertive" aria-atomic="true"></div>
 
-<script src="/static/app.js?v=5" defer></script>
+<script src="/static/speaker.js?v=8" defer></script>
+<script src="/static/app.js?v=8" defer></script>
 </body>
 </html>

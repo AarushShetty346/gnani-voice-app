@@ -11,7 +11,7 @@ Protocol and rules: docs/SPEC.md, "app/session.py + app/main.py", with these add
 - Alerts never wait for TTS: {"type":"alert","id":n,...,"audio_b64":null,"audio_pending":true} goes out at
   once (audio_b64 is set only when the clip is already cached; audio_pending is false when no clip will
   follow), then {"type":"alert_audio","id":n,"audio_b64":...} when Timbre returns (null if it failed).
-- In mic mode a transcript that closely matches an alert spoken in the last ECHO_WINDOW_S is Kavach hearing
+- In mic mode a transcript that closely matches an alert spoken in the last ECHO_WINDOW_S is ScamLingo hearing
   itself through the speaker: it is dropped.
 - Recoverable (non-fatal) Gnani stream errors are logged, not shown; the last one is added to a fatal error.
 - Time budget after "stop" (the browser waits longer, static/app.js SUMMARY_WAIT_MS): settle <= SETTLE_S,

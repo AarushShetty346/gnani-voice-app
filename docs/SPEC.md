@@ -1,6 +1,6 @@
-# Scam Kavach: build spec (shared contract for all builders)
+# ScamLingo: build spec (shared contract for all builders)
 
-**Product:** Scam Kavach (कवच = shield). A live scam-call shield for Indian phone users. Put a suspicious call on
+**Product:** ScamLingo. A live scam-call shield for Indian phone users. Put a suspicious call on
 speaker; the app transcribes it live with Gnani **Prisma v3.0** (any of 10 Indian languages, code-mixed
 Hinglish, noisy phone audio), detects scam patterns, and **interrupts out loud** in the listener's language with a
 Gnani **Timbre v3.0** voice. After the call it shows a plain-language summary to share with family on WhatsApp.
@@ -173,7 +173,7 @@ async def summarize(monitor: CallMonitor, language: str) -> dict
     #  "language":str,"share_text":str}
     # LLM writes summary/advice in `language` when configured; otherwise template text per language (all 10;
     # at minimum hi-IN and en-IN templates, others may fall back to en-IN + hi-IN). share_text is WhatsApp-ready
-    # (≤ 600 chars, includes "Checked with Scam Kavach" and no personal data).
+    # (≤ 600 chars, includes "Checked with ScamLingo" and no personal data).
 ```
 
 ### `app/llm.py`
@@ -226,8 +226,8 @@ For each demo: TTS every line with its speaker's voice and the demo language (sa
 Prints the number of TTS calls before starting.
 
 ## Frontend (frontend builder)
-Mobile-first single page (people will film it on a phone for the 60-second demo). Name "Scam Kavach" with a
-shield mark; tagline e.g. "Suspicious call? Put it on speaker. Kavach listens and warns you." and a Hindi line.
+Mobile-first single page (people will film it on a phone for the 60-second demo). Name "ScamLingo" with a
+shield mark; tagline e.g. "Suspicious call? Put it on speaker. ScamLingo listens and warns you." and a Hindi line.
 Three tabs/modes:
 1. **Live call**: big "Start listening" button → mic via `getUserMedia` (echoCancellation off, noiseSuppression on)
    → `AudioWorklet` (`pcm-worklet.js`) downsamples to 16 kHz Int16 and posts 512-sample (1024-byte) frames →

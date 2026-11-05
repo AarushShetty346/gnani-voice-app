@@ -46,7 +46,7 @@ def demo(demo_id):
 
 def test_index_and_static(client):
     r = client.get("/")
-    assert r.status_code == 200 and "Scam Kavach" in r.text
+    assert r.status_code == 200 and "ScamLingo" in r.text
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/static/style.css").status_code == 200
 
@@ -254,7 +254,7 @@ def test_ws_digital_arrest_demo(client, fast_demos):
     assert all(a["language"] == "hi-IN" and a["text"] and a["audio_b64"] is None for a in alerts)
     summary = msgs[-1]
     assert summary["type"] == "summary" and summary["verdict"] == "scam"
-    assert "Checked with Scam Kavach" in summary["share_text"]
+    assert "Checked with ScamLingo" in summary["share_text"]
     # order: every transcript is followed by its risk
     kinds = [m["type"] for m in msgs]
     for i, k in enumerate(kinds):

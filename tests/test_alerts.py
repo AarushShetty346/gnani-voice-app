@@ -126,7 +126,7 @@ async def test_summary_templates_every_language(no_llm, lang):
     s = await summary.summarize(_monitor(SCAM, None), lang)
     assert s["language"] == lang and s["summary"] and len(s["advice"]) >= 3
     share = s["share_text"]
-    assert len(share) <= 600 and "Checked with Scam Kavach" in share
+    assert len(share) <= 600 and "Checked with ScamLingo" in share
 
 
 async def test_summary_safe_call_english(no_llm):
@@ -144,7 +144,7 @@ async def test_summary_auto_language_uses_dominant(no_llm):
 def test_share_text_limits_and_redaction():
     advice = ["Do not pay. " * 20] * 6
     text = summary.share_text("scam", 95, "Caller 98765 43210 asked for money, mail a@b.com " * 10, advice, "en-IN")
-    assert len(text) <= 600 and text.endswith("Checked with Scam Kavach")
+    assert len(text) <= 600 and text.endswith("Checked with ScamLingo")
     assert "98765" not in text and "a@b.com" not in text
     assert "1930" in summary.share_text("scam", 90, "Call 1930.", [], "en-IN")
 

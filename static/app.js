@@ -1,4 +1,4 @@
-/* Scam Kavach frontend. Vanilla JS, no libraries.
+/* ScamLingo frontend. Vanilla JS, no libraries.
  *
  * Server text is never put into innerHTML: every transcript, alert, summary and status string is
  * inserted with textContent / text nodes. Flag highlights are built from start/end offsets as DOM nodes.
@@ -150,7 +150,7 @@
         }, S.status.llm_mock ? 'LLM: off (rules)' : 'LLM: on'),
       );
       if (S.status.gnani_mock) {
-        $('liveHint').textContent = 'Mock mode: no Gnani key, so Kavach plays a scripted sample call instead of transcribing your mic.';
+        $('liveHint').textContent = 'Mock mode: no Gnani key, so ScamLingo plays a scripted sample call instead of transcribing your mic.';
       }
     } catch (e) {
       box.replaceChildren(el('span', { class: 'pill pill-off' }, 'Server not reachable'));
@@ -261,7 +261,7 @@
           else startSession('demo', d);
         },
       }, icon('play'), el('span', { class: 'demo-play-label' }, 'Play'));
-      // No scam/legit label up front: the verdict appears on the card only after Kavach has heard the call.
+      // No scam/legit label up front: the verdict appears on the card only after ScamLingo has heard the call.
       const card = el('li', { class: 'demo-card', dataset: { id: String(d.id) } },
         el('div', { class: 'demo-body' },
           el('div', { class: 'badges' },
@@ -277,13 +277,13 @@
     syncDemoButtons();
   }
 
-  // After a demo call: show what Kavach decided, on that card.
+  // After a demo call: show what ScamLingo decided, on that card.
   function paintDemoResult(card, verdict) {
     const v = VERDICTS[verdict];
     const b = card.querySelector('.badge-result');
     if (!v || !b) return;
     card.dataset.result = v.level;
-    b.textContent = v.level === 'safe' ? 'Kavach: looks safe' : v.level === 'danger' ? 'Kavach: scam' : 'Kavach: suspicious';
+    b.textContent = v.level === 'safe' ? 'ScamLingo: looks safe' : v.level === 'danger' ? 'ScamLingo: scam' : 'ScamLingo: suspicious';
     b.className = 'badge badge-result badge-' + v.level;
     b.hidden = false;
   }
@@ -465,9 +465,16 @@
         return s.timeline[i].speaker;
       }
     }
-    // Live Gnani never returns the script text verbatim (code-mix, VAD splits/merges lines): go by timing.
-    // A transcript arrives after its line ends, so take the latest unused line that has already ended.
+    // Live Gnani never returns the script text verbatim (code-mix, VAD splits/merges lines): match by wording.
+    // This also covers the last line, which can arrive after the audio has been stopped.
+    if (!s.mock) {
+      const KS = window.ScamLingoSpeaker;
+      const hit = KS ? KS.matchLine(s.timeline, text, s.media ? s.media.currentTime : null) : -1;
+      if (hit >= 0) { s.usedLines.add(hit); return s.timeline[hit].speaker; }
+    }
     if (s.media && !s.mock) {
+      // No wording match: go by timing. A transcript arrives after its line ends, so take the latest
+      // unused line that has already ended.
       const t = s.media.currentTime - 0.3;
       let pick = -1;
       for (let i = 0; i < s.timeline.length; i++) {
@@ -705,7 +712,7 @@
     if (s.speakerGain && S.ctx && S.ctx.state !== 'closed') {
       try { s.speakerGain.gain.setTargetAtTime(on ? 0.18 : 1, S.ctx.currentTime, 0.08); } catch (e) { /* closed */ }
     }
-    // In mic mode, don't let Kavach transcribe its own spoken warning: send silence while it speaks, and a
+    // In mic mode, don't let ScamLingo transcribe its own spoken warning: send silence while it speaks, and a
     // little longer for the speaker's latency and the room's echo (the server also drops echoed transcripts).
     if (s.source === 'mic') {
       clearTimeout(s.suppressTimer);
@@ -865,7 +872,7 @@
     adv.previousElementSibling.hidden = !items.length;
 
     let share = typeof m.share_text === 'string' && m.share_text.trim() ? m.share_text.trim() : '';
-    if (!share) share = (v.en + ': ' + (m.summary || '')).slice(0, 560) + '\nChecked with Scam Kavach';
+    if (!share) share = (v.en + ': ' + (m.summary || '')).slice(0, 560) + '\nChecked with ScamLingo';
     $('shareWa').href = 'https://wa.me/?text=' + encodeURIComponent(share);
     $('shareWa').dataset.share = share;
     $('copyLabel').textContent = 'Copy';
@@ -1060,7 +1067,7 @@
 
   function openSocket(s) {
     let ws;
-    try { ws = new WebSocket(wsUrl()); } catch (e) { throw new Error('Could not open a connection to the Kavach server.'); }
+    try { ws = new WebSocket(wsUrl()); } catch (e) { throw new Error('Could not open a connection to the ScamLingo server.'); }
     ws.binaryType = 'arraybuffer';
     s.ws = ws;
     ws.onopen = () => {
@@ -1083,7 +1090,7 @@
       if (s.state === 'connecting') {
         // The socket opened, so our server is fine: it's still waiting on Gnani's speech service.
         showNotice(s.wsOpen ? 'The speech service is slow to respond. Please try again in a moment.'
-          : 'Could not reach the Kavach server. Is it running?', true);
+          : 'Could not reach the ScamLingo server. Is it running?', true);
         s.errorShown = true;
         finish(s);
       }
@@ -1200,7 +1207,7 @@
   function onSocketClose(s, e) {
     if (S.session !== s || s.state === 'ended') return;
     if (!s.gotSummary && !s.errorShown) {
-      if (s.state === 'connecting') showNotice('Could not connect to the Kavach server. Is it running?', true);
+      if (s.state === 'connecting') showNotice('Could not connect to the ScamLingo server. Is it running?', true);
       else if (s.state === 'live') showNotice('Connection to the server was lost' + (e && e.code && e.code !== 1000 ? ' (code ' + e.code + ').' : '.'), true);
       else if (s.state === 'stopping') showNotice('Call ended. The server closed before sending a summary.');
     }

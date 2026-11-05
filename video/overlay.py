@@ -13,13 +13,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cdp import Browser  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-W, H, SCALE, FPS = 540, 675, 2, 30
+W, H, SCALE, FPS = 540, 960, 2, 30
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Latin:wght@500..800&family=Noto+Sans:wght@400..800&family=Noto+Sans+Devanagari:wght@400..700&family=Noto+Sans+Kannada:wght@400..700&family=Noto+Sans+Tamil:wght@400..700&display=block">
 <style>
-html,body{margin:0;width:540px;height:675px;overflow:hidden;background:transparent}
-#stage{position:relative;width:540px;height:675px;overflow:hidden}
+html,body{margin:0;width:540px;height:960px;overflow:hidden;background:transparent}
+#stage{position:relative;width:540px;height:960px;overflow:hidden}
 .el{position:absolute;transform:translate(var(--tx,0),var(--ty,0)) scale(var(--sc,1));will-change:transform,opacity}
 __CSS__
 </style></head><body><div id="stage"></div>

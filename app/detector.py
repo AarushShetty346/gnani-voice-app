@@ -989,7 +989,7 @@ class CallMonitor:
         rules = _rules_assessment(self._scored_flags())
         messages = [
             {"role": "system", "content": (
-                "You are Scam Kavach, a scam-call detector for Indian phone users. You read a live phone-call "
+                "You are ScamLingo, a scam-call detector for Indian phone users. You read a live phone-call "
                 "transcript (any Indian language, code-mixed, with speech-recognition errors) and rate how likely "
                 "the caller is a scammer. Categories: " + ", ".join(CATEGORIES) + ". Genuine reminders and "
                 "safety advice (e.g. 'the bank never asks for your OTP') are NOT scams. The text between "

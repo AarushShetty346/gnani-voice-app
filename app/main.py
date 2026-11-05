@@ -1,4 +1,4 @@
-"""Scam Kavach web app: live call shield (WS /ws/listen), demo calls, and "check a recording".
+"""ScamLingo web app: live call shield (WS /ws/listen), demo calls, and "check a recording".
 
 Run:  .venv\\Scripts\\python -m uvicorn app.main:app --port 8000
 Open: http://localhost:8000
@@ -31,7 +31,7 @@ LLM_REVIEW_TIMEOUT_S = 25.0
 
 STATIC_DIR = config.ROOT / "static"
 
-app = FastAPI(title="Scam Kavach", docs_url=None, redoc_url=None)
+app = FastAPI(title="ScamLingo", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
