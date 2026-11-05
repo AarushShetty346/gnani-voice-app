@@ -65,8 +65,15 @@ async def capture(a):
 
         await asyncio.sleep(a.tail)                     # summary slides in; hold on it
         if a.scroll_share:
-            await p.eval("document.getElementById('shareWa').scrollIntoView({block: 'end', behavior: 'smooth'})")
+            # Bring the whole Share button into the frame, with a little room under it.
+            await p.eval("(() => { const r = document.getElementById('shareWa').getBoundingClientRect();"
+                         " window.scrollBy({top: r.bottom - document.documentElement.clientHeight + 20,"
+                         " behavior: 'smooth'}); })()")
             await asyncio.sleep(2.5)
+            print("share button:", await p.eval(
+                "(() => { const r = document.getElementById('shareWa').getBoundingClientRect(); return"
+                " {top: Math.round(r.top), bottom: Math.round(r.bottom), vh: document.documentElement.clientHeight,"
+                " ih: innerHeight, y: Math.round(scrollY), max: document.documentElement.scrollHeight}; })()"))
         await cast.stop()
 
         audio_b64 = await p.eval("window.__kv.stopRec()")

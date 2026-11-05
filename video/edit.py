@@ -14,7 +14,9 @@ import subprocess
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-OUTW, OUTH, FPS = 1080, 1350, 30
+OUTW, OUTH, FPS = 1080, 1920, 30          # 9:16, like a reel
+APPW, APPH, APP_Y = 1080, 1350, 280      # app footage sits in a band in the middle
+BG = "0x0a0a0b"
 
 
 def load_caps(caps: dict) -> dict:
@@ -42,13 +44,23 @@ def zoom_chain(s: dict, dur: float) -> str:
     if not z:
         return ""
     z0, z1 = z
-    cx, cy = s.get("focus", [OUTW / 2, OUTH / 2])
+    cx, cy = s.get("focus", [APPW / 2, APPH / 2])
     d = max(0.01, s.get("zoom_dur", dur))
     p = f"clip(t/{d:.3f},0,1)"
     zz = f"({z0}+({z1}-{z0})*pow({p},2)*(3-2*{p}))"
-    return (f",scale=w='2*trunc({OUTW / 2}*{zz})':h='2*trunc({OUTH / 2}*{zz})':eval=frame:flags=lanczos"
-            f",crop={OUTW}:{OUTH}:x='clip({cx}*iw/{OUTW}-{OUTW / 2},0,iw-{OUTW})'"
-            f":y='clip({cy}*ih/{OUTH}-{OUTH / 2},0,ih-{OUTH})'")
+    return (f",scale=w='2*trunc({APPW / 2}*{zz})':h='2*trunc({APPH / 2}*{zz})':eval=frame:flags=lanczos"
+            f",crop={APPW}:{APPH}:x='clip({cx}*iw/{APPW}-{APPW / 2},0,iw-{APPW})'"
+            f":y='clip({cy}*ih/{APPH}-{APPH / 2},0,ih-{APPH})'")
+
+
+def vfades(s: dict, dur: float) -> str:
+    """Optional dips to the background colour at a segment's start/end (soft section changes)."""
+    out = ""
+    if s.get("vfade_in"):
+        out += f",fade=t=in:st=0:d={s['vfade_in']}:color={BG}"
+    if s.get("vfade_out"):
+        out += f",fade=t=out:st={max(0, dur - s['vfade_out']):.4f}:d={s['vfade_out']}:color={BG}"
+    return out
 
 
 def build(spec: dict, out_dir: Path, overlay_concat: Path | None, sfx: dict, final: Path):
@@ -65,7 +77,7 @@ def build(spec: dict, out_dir: Path, overlay_concat: Path | None, sfx: dict, fin
     for k, s in enumerate(spec["base"]):
         dur = seg_dur(s)
         if s["type"] == "black":
-            col = s.get("color", "0x0a0a0b")
+            col = s.get("color", BG)
             filters.append(f"color=c={col}:s={OUTW}x{OUTH}:r={FPS}:d={dur:.4f},format=yuv420p,setsar=1[v{k}]")
             filters.append(f"anullsrc=r=48000:cl=stereo,atrim=0:{dur:.4f}[a{k}]")
         elif s["type"] == "clip":
@@ -75,8 +87,9 @@ def build(spec: dict, out_dir: Path, overlay_concat: Path | None, sfx: dict, fin
             i = add_input(["-ss", f"{a:.4f}", "-t", f"{clip_len:.4f}", "-i", str(info["path"])])
             fr = s.get("freeze", 0.0)
             tp = f",tpad=stop_mode=clone:stop_duration={fr:.4f}" if fr else ""
-            filters.append(f"[{i}:v]setpts=PTS-STARTPTS,fps={FPS}{zoom_chain(s, dur)}{tp},format=yuv420p,setsar=1,"
-                           f"trim=0:{dur:.4f},setpts=PTS-STARTPTS[v{k}]")
+            filters.append(f"[{i}:v]setpts=PTS-STARTPTS,fps={FPS}{zoom_chain(s, dur)}{tp},"
+                           f"pad={OUTW}:{OUTH}:0:{APP_Y}:color={BG},format=yuv420p,setsar=1,"
+                           f"trim=0:{dur:.4f},setpts=PTS-STARTPTS{vfades(s, dur)}[v{k}]")
             if s.get("audio", True):
                 g = s.get("gain", 1.0)
                 fi, fo = s.get("fade_in", 0.03), s.get("fade_out", 0.05)
