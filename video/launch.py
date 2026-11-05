@@ -187,6 +187,8 @@ def edge_fades():
         d = edit.seg_dur(s)
         if s["type"] == "clip":
             for cls, top in (("fadeT", AY), ("fadeB", AY + 675 - 26)):
+                if cls == "fadeT" and not s.get("top_fade", True):   # page not scrolled: nothing cut at the top
+                    continue
                 el(t, t + d, "", cls=cls, style=f"top:{top}px", z=11, i=("none", 0), o=("none", 0))
         t += d
 
@@ -195,7 +197,7 @@ def timeline():
     # ---- S1 cold open: the real red alert, mid-call. Timbre's voice ("Stop! ...") starts 0.57 s before the
     # first frame, which is the first settled red frame.
     s1 = seg({"type": "clip", "cap": "da", "t0": 18.4, "t1": 20.4, "zoom": [1.0, 1.04], "focus": [540, 560],
-              "audio": False})
+              "audio": False, "top_fade": False})
     snd(s1, "cap:da", 1.0, t0=17.76, t1=19.86, fade_out=0.05)
     snd(s1 + 0.12, "sfx:alert", 0.2)
     head(s1, T[0], 'My app caught this scam <span class="red">mid-call.</span>', "ScamLingo", i=("none", 0),
@@ -243,11 +245,12 @@ def timeline():
     snd(s3 + 2.76, "sfx:hit", 0.15)
 
     # ---- S4 the call starts (in the pause after "Hello"); Prisma's first transcript line lands at call 6.78
-    s4 = seg({"type": "clip", "cap": "da", "t0": 2.4, "t1": 8.4, "vfade_in": 0.35})
+    s4 = seg({"type": "clip", "cap": "da", "t0": 2.4, "t1": 8.4, "vfade_in": 0.35, "top_fade": False})
     head(s4 + 0.2, s4 + 4.3, 'A <span class="red">"police inspector"</span> calls', "Real app · live on Gnani")
     head(s4 + 4.3, T[0], 'Gnani Prisma <span class="dim">writes it down, live</span>', "<b>Step 1</b> · hears")
     caption(s4 + 0.1, s4 + 3.84, "Caller · Hindi", "I'm Inspector Rajesh Sharma from the Mumbai Cyber Crime Branch.")
-    ring(s4 + 4.45, T[0], *TRANSCRIPT_BOX)
+    # Off before her reply lands (call 8.07) and the transcript list scrolls up under the box (8.1).
+    ring(s4 + 4.45, s4 + 8.05 - 2.4, *TRANSCRIPT_BOX)
 
     # ---- S5 he builds a fake case
     s5 = seg({"type": "clip", "cap": "da", "t0": 9.4, "t1": 13.8, "fade_out": 0.08})
