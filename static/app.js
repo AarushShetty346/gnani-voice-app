@@ -790,7 +790,16 @@
       void o.offsetWidth;
       o.classList.add('show');
     }
+    fitAlarm();
     setTimeout(() => $('alarmOk').focus({ preventScroll: true }), 60);
+  }
+  // Pin the buttons to the bottom (on a solid backing) only when the alert is taller than the screen.
+  // Otherwise that backing shows as a dark box on the red gradient.
+  function fitAlarm() {
+    const o = $('dangerOverlay');
+    if (o.hidden) return;
+    o.classList.remove('overflowing');
+    o.classList.toggle('overflowing', o.scrollHeight > o.clientHeight + 1);
   }
   // The call is over and the summary is in: take the red overlay down (after its voice finished).
   function closeAlarmForSummary() {
@@ -1429,6 +1438,7 @@
       }
     });
     window.addEventListener('pagehide', () => { if (S.session) finish(S.session, true); stopAlertVoice(); });
+    window.addEventListener('resize', fitAlarm);
     if (window.speechSynthesis) {
       loadVoices();
       try { window.speechSynthesis.addEventListener('voiceschanged', loadVoices); } catch (e) { /* old API */ }

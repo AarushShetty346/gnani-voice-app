@@ -1,0 +1,86 @@
+/* Overlay design kit for the launch video. Matches the app: zinc monochrome, colour only for risk.
+   Stage is 540x675 CSS px rendered at 2x (1080x1350). */
+:root {
+  --bg: #0a0a0b; --ink: #f4f4f5; --ink2: #a1a1aa; --ink3: #71717a; --line: #27272a;
+  --red: #e3253d; --red-deep: #a80f26; --amber: #f5a524; --green: #3ccf8e;
+  --display: 'Anek Latin', 'Noto Sans', sans-serif; --body: 'Noto Sans', sans-serif;
+}
+
+/* full-screen card */
+.card { left: 0; top: 0; width: 540px; height: 675px; background: var(--bg); }
+.card.red { background: radial-gradient(120% 75% at 50% 0%, #e3253d 0%, #a80f26 46%, #5a0713 100%); }
+.card.grain::after { content: ""; position: absolute; inset: 0;
+  background: radial-gradient(80% 60% at 50% 40%, rgb(255 255 255 / .05), transparent 70%); }
+
+/* big kinetic headline */
+.h1 { left: 34px; right: 34px; font: 800 50px/1.02 var(--display); letter-spacing: -.025em; color: var(--ink); }
+.h1 .dim { color: var(--ink3); }
+.h1 .red { color: var(--red); }
+.h1 .w { display: inline-block; }
+.h2 { left: 34px; right: 34px; font: 750 34px/1.08 var(--display); letter-spacing: -.02em; color: var(--ink); }
+.h2 .dim { color: var(--ink3); }
+.center { text-align: center; }
+.kicker { left: 34px; right: 34px; font: 700 15px/1 var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--ink3); }
+.kicker.red { color: var(--red); }
+
+/* captions over footage */
+.cap { left: 18px; right: 18px; display: flex; justify-content: center; }
+.cap .box { background: rgb(10 10 11 / .9); color: #fff; font: 600 20.5px/1.38 var(--body); padding: 11px 16px 12px;
+  border-radius: 16px; text-align: center; max-width: 470px; box-shadow: 0 6px 24px rgb(0 0 0 / .35);
+  border: 1px solid rgb(255 255 255 / .08); }
+.cap .who { display: block; font: 800 12px/1 var(--body); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink3); margin-bottom: 6px; }
+.cap .who.caller { color: #ff6b7d; }
+.cap .who.kavach { color: #fff; }
+.cap.top { top: 22px; }
+.cap.bottom { bottom: 26px; }
+.cap.mid { top: 300px; }
+
+/* banner headline over footage (top) */
+.topline { left: 0; right: 0; top: 0; padding: 22px 30px 40px;
+  background: linear-gradient(to bottom, rgb(10 10 11 / .96) 0%, rgb(10 10 11 / .85) 60%, rgb(10 10 11 / 0) 100%);
+  font: 800 31px/1.06 var(--display); letter-spacing: -.02em; color: var(--ink); }
+.topline .dim { color: var(--ink2); }
+.bottomline { left: 0; right: 0; bottom: 0; padding: 46px 30px 26px;
+  background: linear-gradient(to top, rgb(10 10 11 / .97) 0%, rgb(10 10 11 / .86) 60%, rgb(10 10 11 / 0) 100%);
+  font: 800 31px/1.06 var(--display); letter-spacing: -.02em; color: var(--ink); }
+
+/* small pills / labels */
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+  font: 700 14px/1 var(--body); letter-spacing: .02em; background: rgb(255 255 255 / .1); color: var(--ink);
+  border: 1px solid rgb(255 255 255 / .14); }
+.pill.red { background: rgb(227 37 61 / .16); color: #ff8a98; border-color: rgb(227 37 61 / .4); }
+.pill.green { background: rgb(60 207 142 / .14); color: #6fe3ae; border-color: rgb(60 207 142 / .35); }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.tag { font: 700 12.5px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--ink2);
+  background: rgb(10 10 11 / .82); padding: 8px 12px; border-radius: 10px; border: 1px solid rgb(255 255 255 / .1); }
+
+/* tap ripple */
+.ripple { width: 0; height: 0; }
+.ripple .ring { position: absolute; left: 0; top: 0; width: 70px; height: 70px; border-radius: 50%;
+  border: 3px solid rgb(255 255 255 / .95); box-shadow: 0 0 0 2px rgb(0 0 0 / .25); }
+.ripple .dot { position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%;
+  background: rgb(255 255 255 / .8); transform: translate(-50%, -50%); box-shadow: 0 0 0 2px rgb(0 0 0 / .2); }
+
+/* generic incoming-call phone screen (illustration, no real OS branding) */
+.phone { left: 120px; top: 70px; width: 300px; height: 560px; border-radius: 44px; background: #141416;
+  border: 2px solid #2a2a2e; box-shadow: 0 30px 80px rgb(0 0 0 / .6), inset 0 0 0 6px #0c0c0e; overflow: hidden;
+  transform: translate(calc(var(--tx, 0px) + var(--buzz, 0px)), var(--ty, 0px)) scale(var(--sc, 1)); }
+.phone .scr { position: absolute; inset: 6px; border-radius: 38px; background: linear-gradient(180deg, #1d1d22, #101013); }
+.phone .lbl { position: absolute; left: 0; right: 0; top: 92px; text-align: center; font: 600 14px/1 var(--body); color: var(--ink3); letter-spacing: .06em; }
+.phone .name { position: absolute; left: 14px; right: 14px; top: 122px; text-align: center; font: 800 27px/1.12 var(--display); color: var(--ink); }
+.phone .num { position: absolute; left: 0; right: 0; top: 196px; text-align: center; font: 500 17px/1 var(--body); color: var(--ink2); letter-spacing: .04em; }
+.phone .btns { position: absolute; left: 40px; right: 40px; bottom: 70px; display: flex; justify-content: space-between; }
+.phone .btn { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; }
+.phone .btn.no { background: #e3253d; }
+.phone .btn.yes { background: #22a861; }
+.phone .btn svg { width: 30px; height: 30px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.phone .spk { position: absolute; left: 50%; bottom: 158px; transform: translateX(-50%); font: 700 13px/1 var(--body);
+  color: var(--ink); background: rgb(255 255 255 / .12); padding: 8px 14px; border-radius: 999px; }
+
+/* logo lockup */
+.logo { display: flex; align-items: center; gap: 12px; font: 800 30px/1 var(--display); color: var(--ink); letter-spacing: -.02em; }
+.logo svg { width: 46px; height: 46px; }
+.credits { left: 34px; right: 34px; font: 600 17px/1.5 var(--body); color: var(--ink2); }
+.credits b { color: var(--ink); font-weight: 800; }
+.hash { left: 34px; right: 34px; font: 700 18px/1.4 var(--body); color: var(--ink2); }
