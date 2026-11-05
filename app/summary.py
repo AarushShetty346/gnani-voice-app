@@ -13,6 +13,7 @@ from app.detector import LONG_NUMBER, CallMonitor, quote_utterance
 
 log = logging.getLogger(__name__)
 
+SUMMARY_ATTEMPT_S = 6.5   # per-model LLM timeout; primary + fallback fit the session's 12 s summary budget
 SHARE_MAX = 600
 SHARE_FOOTER = "Checked with Scam Kavach"
 
@@ -111,7 +112,31 @@ _NUMBER_WORD = re.compile(
     r"(?:zero|one|two|three|four|five|six|seven|eight|nine|double|triple|ek|do|teen|char|chaar|paanch|panch|"
     r"chhe|chhah|saat|aath|nau|shunya|शून्य|एक|दो|तीन|चार|पांच|पाँच|छह|सात|आठ|नौ)[,.।]?", re.IGNORECASE)
 _EMAIL = re.compile(r"\S+@\S+\.\S+")
-_LINK = re.compile(r"(?:https?://|www\.)\S+|\b[\w-]+\.(?:com|in|net|org|co|xyz|link|app|top|info)\b", re.IGNORECASE)
+_LINK = re.compile(r"(?:https?://|www\.)\S+|\b(?:[\w-]+\.)+(?:com|in|net|org|co|xyz|link|app|top|info)\b", re.IGNORECASE)
+# Government hosts (gov.in, nic.in) can't be registered by a caller, so the official reporting sites may appear.
+_OFFICIAL_HOST = re.compile(r"(?:[\w-]+\.)*(?:gov|nic)\.in", re.IGNORECASE)
+# "A real bank never asks for an OTP" is advice, not reassurance: the vouching word, at most two words, then a
+# negated verb. "The officer is genuine, don't hang up" or "genuine and you need not worry" don't fit this shape.
+_VOUCH_WORD = re.compile(r"genuine|legitimate|legit|authentic|real ", re.IGNORECASE)
+_ADVICE_SHAPE = re.compile(
+    r"(?:genuine|legitimate|legit|authentic|real)\s+(?:[\w-]+\s+){0,2}?"
+    r"(?:will\s+never|never|will\s+not|won't|do\s+not|does\s+not|don't|doesn't|cannot|can't)\b", re.IGNORECASE)
+
+
+def _official_link(link: str) -> bool:
+    host = re.sub(r"^(?:https?://)?(?:www\.)?", "", link, flags=re.IGNORECASE)
+    host = re.split(r"[/?#:]", host, maxsplit=1)[0].rstrip(".,;)!?")
+    return bool(_OFFICIAL_HOST.fullmatch(host))
+
+
+def _vouches(text: str) -> bool:
+    """True when the text vouches for the caller ("this is a genuine CBI call", "follow their instructions").
+    A vouching word in the shape "real banks never ask for OTP" is safety advice."""
+    for m in _REASSURE.finditer(text):
+        if _VOUCH_WORD.match(m.group()) and _ADVICE_SHAPE.match(text, m.start()):
+            continue
+        return True
+    return False
 
 
 def _spoken_number(text: str) -> bool:
@@ -129,9 +154,9 @@ def _acceptable(verdict: str, summary: str, advice: list[str]) -> bool:
     text = _EMAIL.sub("[email]", " ".join([summary, *advice]))     # emails are redacted later, not links
     if LONG_NUMBER.search(text) or _spoken_number(text):
         return False
-    if any(not link.group().lower().startswith("cybercrime.gov") for link in _LINK.finditer(text)):
+    if any(not _official_link(link.group()) for link in _LINK.finditer(text)):
         return False
-    return verdict == "safe" or not _REASSURE.search(text)
+    return verdict == "safe" or not _vouches(text)
 
 
 async def _llm_text(monitor: CallMonitor, verdict: str, categories: list[str], language: str) -> tuple[str, list[str]] | None:
@@ -150,7 +175,9 @@ async def _llm_text(monitor: CallMonitor, verdict: str, categories: list[str], l
         {"role": "user", "content": f"Verdict: {verdict}. Warning signs: {', '.join(categories) or 'none'}.\n"
                                     f"<transcript>\n{lines}\n</transcript>"},
     ]
-    data = await llm.chat_json(messages)
+    # Gemini latency swings (1 to 10+ s). A slow first attempt gives way to the fallback model, so both fit
+    # inside the session's 12 s summary budget.
+    data = await llm.chat_json(messages, timeout=SUMMARY_ATTEMPT_S)
     if not isinstance(data, dict):
         return None
     summary = data.get("summary")

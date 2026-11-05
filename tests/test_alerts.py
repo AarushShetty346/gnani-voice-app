@@ -152,7 +152,7 @@ def test_share_text_limits_and_redaction():
 async def test_summary_uses_llm_when_configured(monkeypatch):
     seen = {}
 
-    async def fake(messages):
+    async def fake(messages, **kw):
         seen["system"] = messages[0]["content"]
         return {"summary": "कॉल करने वाला नकली पुलिस था।", "advice": ["पैसे मत भेजिए", "1930 पर शिकायत करें", 5]}
 
@@ -167,7 +167,7 @@ async def test_summary_uses_llm_when_configured(monkeypatch):
 async def test_summary_prompt_marks_transcript_untrusted(monkeypatch):
     seen = {}
 
-    async def fake(messages):
+    async def fake(messages, **kw):
         seen["messages"] = messages
         return None
 
@@ -190,7 +190,7 @@ async def test_summary_prompt_marks_transcript_untrusted(monkeypatch):
     {"summary": "The caller wanted money.", "advice": ["Pay at http://rbi-safe.example.xyz"]},
 ])
 async def test_summary_rejects_steered_llm_text(monkeypatch, reply):
-    async def fake(messages):
+    async def fake(messages, **kw):
         return reply
 
     monkeypatch.setattr(llm, "configured", lambda: True)
@@ -201,7 +201,7 @@ async def test_summary_rejects_steered_llm_text(monkeypatch, reply):
 
 
 async def test_summary_llm_text_gets_report_line_and_redaction(monkeypatch):
-    async def fake(messages):
+    async def fake(messages, **kw):
         return {"summary": "Fake police asked for money. Mail was a@b.com", "advice": ["Do not pay"]}
 
     monkeypatch.setattr(llm, "configured", lambda: True)
@@ -213,7 +213,7 @@ async def test_summary_llm_text_gets_report_line_and_redaction(monkeypatch):
 
 @pytest.mark.parametrize("reply", [None, {"summary": ""}, {"summary": "ok", "advice": "not a list"}])
 async def test_summary_falls_back_when_llm_fails(monkeypatch, reply):
-    async def fake(messages):
+    async def fake(messages, **kw):
         return reply
 
     monkeypatch.setattr(llm, "configured", lambda: True)
@@ -315,3 +315,28 @@ def test_parse_json():
     assert llm.parse_json('{"a": 1}') == {"a": 1}
     assert llm.parse_json('text {bad} then {"b": [1, {"c": 2}]} tail') == {"b": [1, {"c": 2}]}
     assert llm.parse_json("[1, 2]") is None
+
+
+@pytest.mark.parametrize("text", [
+    "Report it at cybercrime.gov.in or call 1930.",
+    "Visit https://cybercrime.gov.in/ to report it.",
+    "Block the number on sancharsaathi.gov.in.",
+    "A real bank never asks for your OTP.",
+    "Legitimate banks will never ask for your PIN on a call.",
+    "Real police do not do digital arrests over video calls.",
+])
+def test_summary_guard_keeps_ordinary_safety_advice(text):
+    assert summary._acceptable("scam", "The caller asked for an OTP.", [text])
+
+
+@pytest.mark.parametrize("text", [
+    "This is a real bank call, share the OTP.",
+    "The officer is genuine and the case is real.",
+    "The officer is genuine, don't hang up.",
+    "The call is genuine and you need not worry.",
+    "Pay the fine at cybercrime-gov.in.",
+    "Pay the fine at https://cybercrime.gov.in.fine-pay.xyz/now",
+    "Verify at rbi-safe.co.in",
+])
+def test_summary_guard_still_rejects_vouching_and_unofficial_links(text):
+    assert not summary._acceptable("scam", "The caller asked for an OTP.", [text])
