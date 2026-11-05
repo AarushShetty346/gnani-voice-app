@@ -9,9 +9,10 @@ import asyncio
 import logging
 import re
 from dataclasses import asdict
+from typing import Awaitable, Callable
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import audio, config, gnani, llm
@@ -24,13 +25,28 @@ log = logging.getLogger(__name__)
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024   # /api/analyze upload limit
 MAX_DURATION_S = 10 * 60              # longer recordings would burn too many STT credits
-CHUNK_S = 25.0                        # Prisma REST takes <= 30 s per request
+CHUNK_S = 25.0                        # Prisma REST takes <= 30 s per request (split_wav may reach 26 s)
+MULTIPART_SLACK = 64 * 1024           # form fields + multipart framing on top of the file itself
 LLM_REVIEW_TIMEOUT_S = 25.0
 
 STATIC_DIR = config.ROOT / "static"
 
 app = FastAPI(title="Scam Kavach", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.middleware("http")
+async def reject_huge_uploads(request: Request, call_next):
+    """Refuse an oversized /api/analyze upload from its Content-Length, before the body is spooled."""
+    if request.url.path == "/api/analyze":
+        try:
+            size = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            size = 0
+        if size > MAX_UPLOAD_BYTES + MULTIPART_SLACK:
+            return JSONResponse({"detail": f"The file is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB."},
+                                status_code=413)
+    return await call_next(request)
 
 
 def _demo_audio_path(demo_id: str):
@@ -98,11 +114,20 @@ async def _read_upload(upload: UploadFile) -> bytes:
     return raw
 
 
-async def _transcribe(wav: bytes, language: str) -> list[tuple[float, str, str | None]]:
-    """Live mode: <= 25 s chunks, one REST STT call each, strictly one after another."""
+class ClientGone(Exception):
+    """The browser aborted /api/analyze; stop spending STT credits on it."""
+
+
+async def _transcribe(wav: bytes, language: str,
+                      gone: Callable[[], Awaitable[bool]] | None = None) -> list[tuple[float, str, str | None]]:
+    """Live mode: ~25 s chunks, one REST STT call each, strictly one after another. Before each call,
+    `gone()` is asked whether the client disconnected (Starlette doesn't cancel the handler for us)."""
     chunks = await asyncio.to_thread(audio.split_wav, wav, CHUNK_S)
     rows = []
     for i, (start, chunk) in enumerate(chunks):
+        if gone is not None and await gone():
+            log.info("analyze: client went away after %d of %d chunks; stopping", i, len(chunks))
+            raise ClientGone()
         try:
             res = await gnani.stt(chunk, f"chunk-{i}.wav", language=language, fmt="codemix",
                                   keyterms=list(config.SCAM_KEYTERMS))
@@ -124,25 +149,32 @@ def _mock_rows() -> list[tuple[float, str, str | None]]:
 
 
 @app.post("/api/analyze")
-async def analyze(audio_file: UploadFile = File(..., alias="audio"), language: str = Form("indic-auto"),
-                  warn_language: str = Form("auto")):
+async def analyze(request: Request, audio_file: UploadFile = File(..., alias="audio"),
+                  language: str = Form("indic-auto"), warn_language: str = Form("auto")):
     stt_lang = parse_stt_language(language)
     if stt_lang is None:
         raise HTTPException(400, "language must be 'indic-auto' or 1-4 codes like 'hi-IN,en-IN'.")
     warn = parse_warn_language(warn_language)
     raw = await _read_upload(audio_file)
     try:
-        wav = await asyncio.to_thread(audio.to_wav, raw, 16000)
+        # Decode at most a little past the limit: a small low-bitrate file can hold hours of audio.
+        wav = await asyncio.to_thread(audio.to_wav, raw, 16000, MAX_DURATION_S + 1)
         duration = await asyncio.to_thread(audio.duration_s, wav)
     except audio.AudioError as e:
         raise HTTPException(400, "Could not read this audio file. Try MP3, M4A, WAV, OGG or WebM.") from e
     if duration < 0.1:
         raise HTTPException(400, "The recording has no audio.")
     if duration > MAX_DURATION_S:
-        raise HTTPException(400, f"The recording is {duration / 60:.1f} minutes long; the limit is "
-                                 f"{MAX_DURATION_S // 60} minutes.")
+        raise HTTPException(400, f"The recording is longer than the {MAX_DURATION_S / 60:g}-minute limit "
+                                 f"(it would use too many speech credits). Trim it and try again.")
 
-    rows = _mock_rows() if config.gnani_mock() else await _transcribe(wav, stt_lang)
+    if config.gnani_mock():
+        rows = _mock_rows()
+    else:
+        try:
+            rows = await _transcribe(wav, stt_lang, request.is_disconnected)
+        except ClientGone:
+            return JSONResponse({"detail": "Cancelled."}, status_code=499)
     monitor = CallMonitor()
     transcript = []
     for start_s, text, lang in rows:

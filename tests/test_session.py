@@ -16,7 +16,8 @@ FRAME = b"\x00\x00" * 512
 class FakeStream(StreamBase):
     """Events are whatever the test pushes; close() ends events()."""
 
-    def __init__(self, fail_open: Exception | None = None):
+    def __init__(self, fail_open: Exception | None = None, reports_speech: bool = False):
+        self.reports_speech = reports_speech
         self.q: asyncio.Queue = asyncio.Queue()
         self.frames, self.commits, self.closed, self.cfg = [], 0, False, None
         self.fail_open = fail_open
@@ -51,7 +52,7 @@ class Harness:
     def __init__(self, clock=None, settle_s=0.0, **kw):
         self.sent: list[dict] = []
         self.inbox: asyncio.Queue = asyncio.Queue()
-        self.stream = FakeStream(kw.pop("fail_open", None))
+        self.stream = FakeStream(kw.pop("fail_open", None), kw.pop("reports_speech", False))
 
         def factory(cfg, lines):
             self.stream.cfg, self.lines = cfg, lines
@@ -101,20 +102,38 @@ class Harness:
 # ---------------------------------------------------------------- AlertPolicy (pure)
 
 def test_policy_dedupe_gap_and_one_preempt():
-    p = sess.AlertPolicy(gap_s=6)
+    p = sess.AlertPolicy(gap_s=6, followup_gap_s=12, max_alerts=3)
     assert p.decide("safe", ["impersonation"], ["impersonation"], 0) is None
     assert p.decide("caution", ["impersonation"], ["impersonation"], 0) == ("impersonation", "caution")
-    assert p.decide("caution", ["impersonation"], ["impersonation"], 10) is None          # once per category
-    assert p.decide("caution", ["account_threat"], [], 12) == ("account_threat", "caution")
-    assert p.decide("caution", ["urgency_secrecy"], [], 14) is None                         # inside the 6 s gap
-    assert p.pending == ["urgency_secrecy"]
-    assert p.decide("danger", ["otp_request"], [], 15) == ("otp_request", "danger")         # danger pre-empts once
-    assert p.decide("danger", ["remote_access"], [], 16) is None                            # ...only once
-    assert p.blocked(16) and p.next_allowed() == 21
-    assert p.decide("danger", [], [], 21) == ("remote_access", "danger")                    # newest first
-    assert p.decide("danger", [], [], 27) == ("urgency_secrecy", "danger")
-    assert p.decide("danger", ["otp_request"], [], 40) is None
-    assert p.sent == ["impersonation", "account_threat", "otp_request", "remote_access", "urgency_secrecy"]
+    assert p.decide("caution", ["account_threat"], [], 12) is None                          # one caution warning
+    assert p.decide("danger", ["urgency_secrecy"], [], 13) == ("urgency_secrecy", "danger")  # rise speaks again
+    assert p.decide("danger", ["digital_arrest"], [], 30) is None                           # not a direct ask
+    assert p.decide("danger", ["otp_request"], [], 20) is None                              # inside the 12 s gap
+    assert p.pending == ["otp_request"]
+    assert p.blocked(20) and p.next_allowed() == 25
+    assert p.decide("danger", [], [], 25) == ("otp_request", "danger")                      # held-back ask
+    assert p.decide("danger", ["payment_request"], [], 60) is None                          # max 3 per call
+    assert p.sent == ["impersonation", "urgency_secrecy", "otp_request"]
+
+
+def test_policy_danger_preempts_once_and_followups_wait():
+    """Rising to danger may cut the caution gap once; follow-ups never cut the main warning off."""
+    p = sess.AlertPolicy(gap_s=6, followup_gap_s=12, max_alerts=3)
+    assert p.decide("caution", ["account_threat"], [], 10.0) == ("account_threat", "caution")
+    assert p.decide("danger", ["otp_request"], [], 11.0) == ("otp_request", "danger")       # pre-empts the 6 s gap
+    assert p.decide("danger", ["remote_access"], [], 14.0) is None                         # 12 s follow-up gap
+    assert p.decide("danger", [], [], 23.0) == ("remote_access", "danger")
+
+
+def test_policy_one_danger_warning_for_a_whole_scam_call():
+    """The live Hindi demo used to speak 5 times; now: one danger warning plus one for the money ask."""
+    p = sess.AlertPolicy()
+    out = [p.decide("danger", ["impersonation", "digital_arrest"], [], 18.7),
+           p.decide("danger", ["digital_arrest"], [], 23.2),
+           p.decide("danger", ["account_threat"], [], 27.9),
+           p.decide("danger", ["urgency_secrecy"], [], 28.2),
+           p.decide("danger", ["payment_request"], [], 40.6)]
+    assert [o for o in out if o] == [("impersonation", "danger"), ("payment_request", "danger")]
 
 
 def test_policy_level_rise_falls_back_to_generic():
@@ -132,7 +151,8 @@ def test_parse_languages():
     assert sess.parse_stt_language("hi-IN,en-IN,ta-IN,te-IN,kn-IN") is None
     assert sess.parse_stream_language("kn-IN") == "kn-IN"
     assert sess.parse_stream_language(None) == "indic-auto"
-    assert sess.parse_stream_language("hi-IN,en-IN") is None          # realtime: one code only
+    assert sess.parse_stream_language("kn-IN,en-IN") == "kn-IN"       # realtime: one code only -> the first
+    assert sess.parse_stream_language("xx-IN,en-IN") is None
     assert sess.parse_warn_language("ta-IN") == "ta-IN"
     assert sess.parse_warn_language("../x") == "auto"
 
@@ -149,15 +169,18 @@ async def test_transcripts_risk_alert_dedupe_and_gap():
     assert h.of("risk")[-1]["level"] == "safe" and not h.of("alert")
     await h.say("Tell me the OTP you just received.", at=1)
     await h.say("Tell me the OTP you just received.", at=2)     # same category: no second alert
-    await h.say("Install AnyDesk app now.", at=3)               # inside the gap: danger pre-empt (once)
-    await h.say("Send the money by UPI right now.", at=4)       # inside the gap: held back
-    assert [a["category"] for a in h.of("alert")] == ["otp_request", "remote_access"]
-    await h.say("Okay.", at=20)                                 # gap over: the held-back alert goes out
+    await h.say("Install AnyDesk app now.", at=3)               # inside the gap, already danger: held back
+    await h.say("Send the money by UPI.", at=4)                 # inside the gap: held back
+    assert [a["category"] for a in h.of("alert")] == ["otp_request"]
+    await h.say("Okay.", at=20)                                 # gap over: the newest held-back alert goes out
+    await h.say("Fine.", at=33)                                 # ...then the next, 12 s later
     await h.until(lambda: len(h.of("alert")) == 3)
     alerts = h.of("alert")
-    assert alerts[2]["category"] == "payment_request"
+    assert [a["category"] for a in alerts] == ["otp_request", "payment_request", "remote_access"]
+    assert [a["id"] for a in alerts] == [1, 2, 3]
     assert all(a["level"] == "danger" and a["language"] == "en-IN" and a["text"] for a in alerts)
-    assert all(a["audio_b64"] is None for a in alerts)          # mock mode: no TTS
+    assert all(a["audio_b64"] is None and a["audio_pending"] is False for a in alerts)   # mock mode: no TTS
+    assert not h.of("alert_audio")
     t = h.of("transcript")[1]
     assert t["index"] == 1 and t["language"] == "en-IN"
     assert t["flags"] and set(t["flags"][0]) == {"category", "phrase", "start", "end"}
@@ -166,7 +189,8 @@ async def test_transcripts_risk_alert_dedupe_and_gap():
     assert h.stream.commits == 1 and h.stream.closed and h.s.end_reason == "stop"
 
 
-async def test_alert_tts_runs_in_background():
+async def test_alert_never_waits_for_tts():
+    """The alert goes out at once with no audio; the clip follows as alert_audio with the same id."""
     gate = asyncio.Event()
 
     async def slow_audio(text, lang):
@@ -176,13 +200,123 @@ async def test_alert_tts_runs_in_background():
     h.start(warn_language="auto")
     await h.until(lambda: h.of("ready"))
     await h.say("आपका OTP बताइए नहीं तो आपका account block हो जायेगा।", lang="hi-IN")
-    await h.say("जल्दी कीजिए।", lang="hi-IN")
-    await h.say("ठीक है।", lang="hi-IN")
-    assert len(h.of("transcript")) == 3 and not h.of("alert")   # TTS pending, transcripts still flow
-    gate.set()
     await h.until(lambda: h.of("alert"))
     a = h.of("alert")[0]
-    assert a["language"] == "hi-IN" and base64.b64decode(a["audio_b64"]) == b"RIFFfake"
+    assert a["language"] == "hi-IN" and a["audio_b64"] is None and a["id"] == 1 and a["text"]
+    assert a["audio_pending"] is True
+    await h.say("जल्दी कीजिए।", lang="hi-IN")
+    await h.say("ठीक है।", lang="hi-IN")
+    assert len(h.of("transcript")) == 3 and not h.of("alert_audio")   # TTS pending, transcripts still flow
+    gate.set()
+    await h.until(lambda: h.of("alert_audio"))
+    assert h.of("alert_audio") == [{"type": "alert_audio", "id": 1,
+                                    "audio_b64": base64.b64encode(b"RIFFfake").decode()}]
+    await h.stop()
+
+
+async def test_cached_alert_audio_rides_inside_the_alert():
+    async def cached(text, lang):
+        return b"RIFFcached"
+    h = Harness(alert_audio=cached)
+    h.start()
+    await h.until(lambda: h.of("ready"))
+    await h.say("Tell me the OTP you just received.")
+    await h.until(lambda: h.of("alert"))
+    assert base64.b64decode(h.of("alert")[0]["audio_b64"]) == b"RIFFcached" and not h.of("alert_audio")
+    assert h.of("alert")[0]["audio_pending"] is False
+    await h.stop()
+
+
+async def test_alerts_keep_their_order_when_only_the_later_one_is_cached():
+    async def audio(text, lang):
+        if "OTP" in text:                    # the first alert's clip is not cached: slow TTS
+            await asyncio.sleep(0.3)
+        return b"RIFF" + text[:4].encode()
+    h = Harness(clock=True, alert_audio=audio)
+    h.start()
+    await h.until(lambda: h.of("ready"))
+    h.s._maybe_alert(Assessment(50, "caution", ["otp_request"], "", "rules"), ["otp_request"])
+    h.t[0] = 1.0
+    h.s._maybe_alert(Assessment(80, "danger", ["remote_access"], "", "rules"), ["remote_access"])
+    await h.until(lambda: len(h.of("alert")) == 2 and h.of("alert_audio"))
+    assert [(a["id"], a["level"]) for a in h.of("alert")] == [(1, "caution"), (2, "danger")]
+    assert h.of("alert")[1]["audio_b64"] and h.of("alert_audio")[0]["id"] == 1
+    await h.stop()
+
+
+async def test_failing_or_slow_tts_still_alerts(monkeypatch):
+    monkeypatch.setattr(sess, "ALERT_TTS_TIMEOUT_S", 0.05)
+
+    async def boom(text, lang):
+        raise RuntimeError("Timbre down")
+
+    release = asyncio.Event()
+
+    async def never(text, lang):
+        await release.wait()
+        return b"RIFFlate"
+    for fn in (boom, never):
+        h = Harness(alert_audio=fn)
+        h.start()
+        await h.until(lambda: h.of("ready"))
+        await h.say("Tell me the OTP you just received.")
+        await h.until(lambda: h.of("alert"))
+        await asyncio.sleep(0.15)
+        assert h.of("alert")[0]["audio_b64"] is None and not h.of("alert_audio")
+        await h.stop()
+
+    async def late_boom(text, lang):
+        await asyncio.sleep(0.1)
+        raise RuntimeError("Timbre 503")
+    monkeypatch.setattr(sess, "ALERT_TTS_TIMEOUT_S", 5.0)
+    h = Harness(alert_audio=late_boom)
+    h.start()
+    await h.until(lambda: h.of("ready"))
+    await h.say("Tell me the OTP you just received.")
+    await h.until(lambda: h.of("alert_audio"))
+    assert h.of("alert")[0]["audio_pending"] is True
+    assert h.of("alert_audio") == [{"type": "alert_audio", "id": 1, "audio_b64": None}]   # speak now, browser
+    await h.stop()
+    release.set()                    # the shielded TTS still finishes (and would fill the cache)
+    await asyncio.sleep(0.01)
+
+
+async def test_mic_echo_of_our_own_alert_is_dropped():
+    from app import alerts
+    h = Harness(clock=True)
+    h.start(warn_language="hi-IN")
+    await h.until(lambda: h.of("ready"))
+    await h.say("आपका OTP बताइए नहीं तो आपका account block हो जायेगा।", at=0, lang="hi-IN")
+    await h.until(lambda: h.of("alert"))
+    spoken = h.of("alert")[0]["text"]
+    assert spoken == alerts.alert_text(h.of("alert")[0]["category"], h.of("alert")[0]["level"], "hi-IN")
+    n = len(h.of("transcript"))
+    words = spoken.split()
+    h.stream.say(" ".join(words[len(words) // 3:]), "hi-IN")           # the tail of our warning, via the mic
+    await asyncio.sleep(0.1)
+    assert len(h.of("transcript")) == n
+    await h.say("अपना OTP बताइए।", at=2, lang="hi-IN")                  # short real speech is never dropped
+    await h.say("सर मैं आपको OTP नहीं बताऊँगी, मैं बैंक को फ़ोन करती हूँ।", at=3, lang="hi-IN")
+    assert len(h.of("transcript")) == n + 2
+    h.t[0] = 3 + sess.ECHO_WINDOW_S
+    await h.say(spoken, lang="hi-IN")                                  # long after: not an echo any more
+    assert len(h.of("transcript")) == n + 3
+    await h.stop()
+
+
+def test_echo_score():
+    alert = "रुकिए! यह कॉल धोखा लग रहा है। अपना OTP किसी को मत बताइए। अभी फ़ोन काट दीजिए।"
+    assert sess.is_echo("यह call धोखा लग रहा है। अपना OTP किसी को मत बताइए", alert)   # code-mixed echo
+    assert not sess.is_echo("अपना OTP बताइए", alert)                                   # too short to judge
+    assert not sess.is_echo("आपका account block हो जायेगा, OTP बताइए", alert)
+
+
+async def test_demo_source_never_filters_echo():
+    h = Harness()
+    h.start(source="demo", demo_id="digital-arrest", warn_language="hi-IN")
+    await h.until(lambda: h.of("ready"))
+    h.s._spoken.append((h.s.now(), "रुकिए! यह कॉल धोखा लग रहा है। अपना OTP किसी को मत बताइए।"))
+    await h.say("रुकिए! यह कॉल धोखा लग रहा है। अपना OTP किसी को मत बताइए।", lang="hi-IN")
     await h.stop()
 
 
@@ -252,6 +386,75 @@ async def test_frames_forwarded_and_bad_frames_rejected_once():
     await h.stop()
 
 
+async def test_recoverable_stream_error_is_not_shown_but_explains_a_fatal_one():
+    h = Harness()
+    h.start()
+    await h.until(lambda: h.of("ready"))
+    h.stream.q.put_nowait({"type": "error", "message": "Concurrent session limit (2) reached", "fatal": False})
+    await h.say("Hello.")
+    assert not h.of("error")
+    h.stream.q.put_nowait({"type": "error", "message": "Gnani stream closed (1008 limit)", "fatal": True})
+    await asyncio.wait_for(h.task, 3)
+    assert [e["message"] for e in h.of("error")] == [
+        "Gnani stream closed (1008 limit): Concurrent session limit (2) reached"]
+    assert h.sent[-1]["type"] == "summary"
+
+
+async def test_settle_ends_early_when_nothing_is_pending():
+    """Real Gnani reports speech_start/processing: with every utterance already transcribed, stop
+    doesn't sit out the whole settle time."""
+    h = Harness(settle_s=5.0, reports_speech=True)
+    h.start()
+    await h.until(lambda: h.of("ready"))
+    await h.say("Hello.")
+    loop = asyncio.get_running_loop()
+    t = loop.time()
+    await h.stop()
+    assert loop.time() - t < 1.0 and h.sent[-1]["type"] == "summary"
+
+
+async def test_settle_waits_for_speech_in_progress():
+    h = Harness(settle_s=3.0, reports_speech=True)
+    h.start()
+    await h.until(lambda: h.of("ready"))
+    h.stream.q.put_nowait({"type": "speech_start"})
+    await asyncio.sleep(0.02)
+    h.inbox.put_nowait(json.dumps({"type": "stop"}))
+    await h.until(lambda: h.stream.commits == 1)
+    await asyncio.sleep(0.5)                                      # past the grace: still waiting for it
+    assert not h.of("summary")
+    h.stream.q.put_nowait({"type": "processing"})
+    h.stream.say("Tell me the OTP you just received.")
+    await asyncio.wait_for(h.task, 3)
+    assert len(h.of("transcript")) == 1 and h.sent[-1]["type"] == "summary"
+
+
+async def test_client_leaving_during_settle_ends_the_session_at_once():
+    h = Harness(settle_s=10.0)
+    h.start()
+    await h.until(lambda: h.of("ready"))
+    h.inbox.put_nowait(json.dumps({"type": "stop"}))
+    await h.until(lambda: h.stream.commits == 1)
+    loop = asyncio.get_running_loop()
+    t = loop.time()
+    h.inbox.put_nowait(None)                                      # the browser closed the socket
+    await asyncio.wait_for(h.task, 3)
+    assert loop.time() - t < 0.5 and h.stream.closed and not h.of("summary")
+
+
+async def test_stop_path_fits_the_browser_wait():
+    """The browser's summary wait (app.js) must outlast the server's worst-case stop path."""
+    import re
+
+    from app import config, gnani_stream
+    js = (config.ROOT / "static" / "app.js").read_text(encoding="utf-8")
+    wait_s = int(re.search(r"SUMMARY_WAIT_MS = (\d+)", js).group(1)) / 1000
+    worst = (sess.SETTLE_S + gnani_stream.CLOSE_TIMEOUT_S + 1.0
+             + max(sess.ALERT_WAIT_S, sess.SUMMARY_TIMEOUT_S))
+    assert wait_s > worst + 3
+    assert sess.MAX_SESSION_S < 15 * 60
+
+
 async def test_fatal_stream_error_ends_with_summary():
     h = Harness()
     h.start()
@@ -289,7 +492,7 @@ async def test_session_cap():
     ({"source": "demo", "demo_id": "nope"}, "Unknown demo"),
     ({"source": "radio"}, "Unknown source"),
     ({"language": "xx-YY"}, "language"),
-    ({"language": "hi-IN,en-IN"}, "one language code"),
+    ({"language": "hi-IN,xx-YY"}, "one language code"),
 ])
 async def test_bad_start_messages(start, needle):
     h = Harness()
@@ -311,6 +514,14 @@ async def test_gnani_open_error_is_reported():
     await asyncio.wait_for(h.task, 3)
     assert h.sent == [{"type": "error", "message": "Could not start Gnani speech-to-text: Invalid API key",
                        "fatal": True}]
+
+
+async def test_mic_language_list_is_narrowed_to_one_code():
+    h = Harness()
+    h.start(language="kn-IN,en-IN")
+    await h.until(lambda: h.of("ready"))
+    assert h.stream.cfg.language == "kn-IN"
+    await h.stop()
 
 
 async def test_demo_source_uses_demo_lines_and_telephony():

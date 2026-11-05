@@ -6,8 +6,10 @@ wave module (ffmpeg can't fix up WAV sizes when writing to a pipe).
 import io
 import os
 import subprocess
+import sys
 import tempfile
 import wave
+from array import array
 
 
 class AudioError(Exception):
@@ -73,18 +75,20 @@ def _pcm_to_wav(pcm: bytes, rate: int) -> bytes:
     return buf.getvalue()
 
 
-def to_pcm16(raw: bytes, rate: int = 16000) -> bytes:
-    """Any input → raw s16le mono at `rate`."""
+def to_pcm16(raw: bytes, rate: int = 16000, max_s: float | None = None) -> bytes:
+    """Any input → raw s16le mono at `rate`. max_s: decode at most this many seconds (a small file in a
+    low-bitrate codec can hold hours of audio; this keeps memory and ffmpeg time bounded)."""
     pcm = _wav_pcm(raw, rate)
     if pcm is not None:
-        return pcm
-    return _ffmpeg(["-i", "{in}", "-vn", "-ac", "1", "-ar", str(rate), "-f", "s16le", "-acodec", "pcm_s16le",
-                    "pipe:1"], raw)
+        return pcm if max_s is None else pcm[:int(max_s * rate) * 2]
+    limit = ["-t", f"{max_s:.3f}"] if max_s is not None else []
+    return _ffmpeg(["-i", "{in}", *limit, "-vn", "-ac", "1", "-ar", str(rate), "-f", "s16le",
+                    "-acodec", "pcm_s16le", "pipe:1"], raw)
 
 
-def to_wav(raw: bytes, rate: int = 16000) -> bytes:
-    """Any input → mono s16 WAV at `rate`."""
-    return _pcm_to_wav(to_pcm16(raw, rate), rate)
+def to_wav(raw: bytes, rate: int = 16000, max_s: float | None = None) -> bytes:
+    """Any input → mono s16 WAV at `rate` (at most max_s seconds when given)."""
+    return _pcm_to_wav(to_pcm16(raw, rate, max_s), rate)
 
 
 def duration_s(raw: bytes) -> float:
@@ -95,11 +99,59 @@ def duration_s(raw: bytes) -> float:
     return len(to_pcm16(raw, 16000)) / 32000
 
 
+SEARCH_FRAC = 0.12     # look for a quiet cut point in the last 12% of each chunk (3 s of 25 s)
+TAIL_FRAC = 0.04       # a final piece shorter than 4% of max_s (1 s of 25 s) joins the previous chunk
+CUT_WIN_S = 0.02       # 20 ms energy windows
+
+
+def _samples(pcm: bytes) -> array:
+    a = array("h")
+    a.frombytes(pcm[:len(pcm) // 2 * 2])
+    if sys.byteorder == "big":
+        a.byteswap()
+    return a
+
+
+def _quiet_cut(a: array, lo: int, hi: int, win: int) -> int:
+    """Sample index in [lo, hi] with the least energy around it; ties go to the latest (longest chunk)."""
+    best, best_e = hi, None
+    c = hi
+    while c >= lo:
+        seg = a[max(0, c - win // 2):c + win // 2]
+        e = sum(x * x for x in seg)
+        if best_e is None or e < best_e:
+            best, best_e = c, e
+            if e == 0:
+                break
+        c -= win
+    return best
+
+
 def split_wav(raw: bytes, max_s: float = 25.0, rate: int = 16000) -> list[tuple[float, bytes]]:
-    """Cut audio into consecutive WAV chunks of at most max_s seconds: [(start_s, wav), ...]."""
-    pcm = to_pcm16(raw, rate)
-    step = int(max_s * rate) * 2                     # bytes per chunk (2 bytes per sample)
-    return [(i / (2 * rate), _pcm_to_wav(pcm[i:i + step], rate)) for i in range(0, len(pcm), step)]
+    """Cut audio into consecutive WAV chunks of about max_s seconds: [(start_s, wav), ...].
+
+    Each cut goes at the quietest 20 ms in the last ~12% before max_s, so a word is rarely split across
+    two STT requests. A tiny last piece is merged into the previous chunk instead of costing an extra
+    request, so a chunk can reach 1.04 * max_s (26 s for 25 s; Prisma REST takes 30 s)."""
+    a = _samples(to_pcm16(raw, rate))
+    n, limit = len(a), int(max_s * rate)
+    win = max(1, int(CUT_WIN_S * rate))
+    cuts, start = [0], 0
+    while n - start > limit:
+        hi = start + limit
+        start = _quiet_cut(a, hi - int(limit * SEARCH_FRAC), hi, win)
+        cuts.append(start)
+    if len(cuts) > 1 and n - cuts[-1] < limit * TAIL_FRAC:
+        cuts.pop()
+    cuts.append(n)
+    return [(s / rate, _pcm_to_wav(_le_bytes(a[s:e]), rate)) for s, e in zip(cuts, cuts[1:]) if e > s]
+
+
+def _le_bytes(a: array) -> bytes:
+    if sys.byteorder == "big":
+        a = array("h", a)
+        a.byteswap()
+    return a.tobytes()
 
 
 def phone_line(wav: bytes, noise: float = 0.015) -> bytes:

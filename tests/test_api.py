@@ -133,7 +133,7 @@ def test_analyze_bad_audio(client, payload, status):
 def test_analyze_limits(client, monkeypatch):
     monkeypatch.setattr(main, "MAX_DURATION_S", 1)
     r = client.post("/api/analyze", files={"audio": ("long.wav", wav_bytes(1.5), "audio/wav")})
-    assert r.status_code == 400 and "minutes" in r.json()["detail"]
+    assert r.status_code == 400 and "minute limit" in r.json()["detail"]
     monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 1000)
     r = client.post("/api/analyze", files={"audio": ("big.wav", wav_bytes(1.0), "audio/wav")})
     assert r.status_code == 413
@@ -170,6 +170,36 @@ def test_analyze_live_chunks_sequentially(client, monkeypatch):
         "Nahi toh aapka account block ho jayega."]
     assert [t["start_s"] for t in data["transcript"]][0] == 0 and data["transcript"][2]["start_s"] == 2.0
     assert data["risk"]["level"] != "safe" and data["summary"]["language"] == "en-IN" and data["mock"] is False
+
+
+def test_analyze_refuses_oversized_body_before_reading_it(client, monkeypatch):
+    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 1000)
+    monkeypatch.setattr(main, "MULTIPART_SLACK", 0)
+    read = []
+    monkeypatch.setattr(main, "_read_upload", lambda *a: read.append(1))
+    r = client.post("/api/analyze", files={"audio": ("big.wav", wav_bytes(1.0), "audio/wav")})
+    assert r.status_code == 413 and "larger than" in r.json()["detail"] and not read
+
+
+async def test_transcribe_stops_when_the_client_leaves(monkeypatch):
+    """The browser aborted (e.g. switched to a demo): no more STT calls for chunks nobody will see."""
+    monkeypatch.setattr(main, "CHUNK_S", 1.0)
+    calls = []
+
+    async def fake_stt(audio, filename="clip.wav", **kw):
+        calls.append(filename)
+        return {"transcript": "Aapka OTP bataiye.", "detected_language_code": "hi-IN"}
+    monkeypatch.setattr(gnani, "stt", fake_stt)
+    asked = []
+
+    async def gone():
+        asked.append(1)
+        return len(asked) > 1                      # still there for chunk 0, gone before chunk 1
+    with pytest.raises(main.ClientGone):
+        await main._transcribe(wav_bytes(3.5), "hi-IN", gone)
+    assert calls == ["chunk-0.wav"]
+    rows = await main._transcribe(wav_bytes(2.5), "hi-IN")     # no check: every chunk
+    assert len(rows) == 3
 
 
 def test_analyze_gnani_error_is_502(client, monkeypatch):
@@ -219,6 +249,8 @@ def test_ws_digital_arrest_demo(client, fast_demos):
     alerts = [m for m in msgs if m["type"] == "alert"]
     assert any(a["level"] == "danger" for a in alerts)
     assert len({a["category"] for a in alerts}) == len(alerts)              # one alert per category
+    assert [a["id"] for a in alerts] == list(range(1, len(alerts) + 1))
+    assert not [m for m in msgs if m["type"] == "alert_audio"]              # mock mode: no TTS
     assert all(a["language"] == "hi-IN" and a["text"] and a["audio_b64"] is None for a in alerts)
     summary = msgs[-1]
     assert summary["type"] == "summary" and summary["verdict"] == "scam"
@@ -244,6 +276,12 @@ def test_ws_mic_in_mock_mode_hears_digital_arrest(client, fast_demos):
     first = next(m for m in msgs if m["type"] == "transcript")
     assert first["text"] == demo("digital-arrest")["lines"][0]["text"]
     assert msgs[-1]["type"] == "summary"
+
+
+def test_ws_mic_language_list_is_accepted(client, fast_demos):
+    """Realtime STT takes one code: a list from an older client is narrowed, not refused."""
+    msgs = run_call(client, {"source": "mic", "language": "ta-IN,en-IN"}, 1)
+    assert msgs[0]["type"] == "ready" and msgs[-1]["type"] == "summary"
 
 
 def test_ws_stop_right_away_still_summarises(client):
@@ -294,3 +332,39 @@ async def test_make_demo_audio_build_offline(tmp_path, monkeypatch):
     await mda.build(d, clean=True)                       # second run: every line comes from the cache
     assert len(calls) == len(d["lines"])
     assert line_timings(d, {"legit-bank-reminder": entry}) == spans
+
+
+# ---------------------------------------------------------------- scripts/prewarm_alerts.py (offline)
+
+def _load_script(name):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(name, config.ROOT / "scripts" / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+async def test_prewarm_alerts_fills_the_cache_alert_audio_reads(tmp_path, monkeypatch, capsys):
+    from app import alerts
+    pw = _load_script("prewarm_alerts")
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path / "cache")
+    calls = []
+
+    async def fake_tts(text, voice="Shivani", language="auto", **kw):
+        calls.append((text, language))
+        return wav_bytes(0.1)
+    monkeypatch.setattr(gnani, "tts", fake_tts)
+    n = len(pw.alert_texts(["ta-IN"]))
+    assert n >= 10                                               # 9 categories x 2 levels, minus duplicates
+    monkeypatch.setenv("GNANI_API_KEY", "")
+    assert await pw.prewarm(["ta-IN"], dry_run=True) == 0 and not calls
+    assert f"{n} to generate" in capsys.readouterr().out
+    monkeypatch.setenv("GNANI_API_KEY", "test-key")
+    assert await pw.prewarm(["ta-IN"]) == 0
+    assert len(calls) == n and all(lang == "ta-IN" for _, lang in calls)
+    assert await pw.prewarm(["ta-IN"]) == 0 and len(calls) == n    # second run: all cached
+    text = alerts.alert_text("otp_request", "danger", "ta-IN")
+    assert await alerts.alert_audio(text, "ta-IN") == wav_bytes(0.1) and len(calls) == n   # same cache
+    assert pw.parse_languages(None) == list(config.LANGUAGES)
+    with pytest.raises(SystemExit):
+        pw.parse_languages("ta-IN,xx-XX")

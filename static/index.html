@@ -83,6 +83,15 @@
 
       <!-- Live call -->
       <div class="panel" id="panel-live" role="tabpanel" aria-labelledby="tab-live">
+        <div class="warn-row call-lang">
+          <label for="callLang">Call language <span class="hi" lang="hi">कॉल की भाषा</span></label>
+          <div class="select-wrap">
+            <select id="callLang" aria-describedby="callLangHint">
+              <option value="indic-auto">Auto-detect</option>
+            </select>
+          </div>
+          <p class="field-hint" id="callLangHint">Pick the caller's language for best accuracy</p>
+        </div>
         <button class="listen" id="listenBtn" type="button">
           <span class="listen-rings" aria-hidden="true"><i></i><i></i><i></i></span>
           <span class="listen-core">
