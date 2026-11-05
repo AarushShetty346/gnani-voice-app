@@ -62,6 +62,62 @@ EXTRA_CASES: list[tuple[str, str | None, str, set[str]]] = [
      {"prize_job_offer", "payment_request"}),
     ("આ એપ ડાઉનલોડ કરો, હું તમારી સ્ક્રીન શેર કરીને મદદ કરીશ", "gu-IN", "caution", {"remote_access"}),
     ("ਤੁਹਾਡੀ ਲਾਟਰੀ ਨਿਕਲੀ ਹੈ, ਫੀਸ ਭਰੋ ਤੇ ਇਨਾਮ ਲਓ", "pa-IN", "danger", {"prize_job_offer", "payment_request"}),
+    # "if you don't tell the OTP, your account is blocked": conditional threats are not negation
+    ("OTP नहीं बताया तो आपका account बंद हो जाएगा", "hi-IN", "danger", {"otp_request", "account_threat"}),
+    ("OTP nahi bataya to aapka account block ho jayega", None, "danger", {"otp_request", "account_threat"}),
+    ("OTP না দিলে আপনার অ্যাকাউন্ট বন্ধ হয়ে যাবে", "bn-IN", "danger", {"otp_request", "account_threat"}),
+    ("OTP ಹೇಳಿ ಇಲ್ಲಾಂದ್ರೆ ನಿಮ್ಮ ಅಕೌಂಟ್ ಬ್ಲಾಕ್ ಆಗುತ್ತೆ", "kn-IN", "danger", {"otp_request", "account_threat"}),
+    ("OTP नाही सांगितला तर तुमचं खाते बंद होईल", "mr-IN", "danger", {"otp_request", "account_threat"}),
+    # -ये spellings (Prisma writes बताइये / जायेगा)
+    ("आपका OTP बोलिये", "hi-IN", "caution", {"otp_request"}),
+    ("OTP बता दीजिये", "hi-IN", "caution", {"otp_request"}),
+    ("OTP बताईये", "hi-IN", "caution", {"otp_request"}),
+    ("किसी को भी मत बताइयेगा, पैसे ट्रांसफर कीजिये", "hi-IN", "caution", {"urgency_secrecy", "payment_request"}),
+    ("आपका KYC pending है, आपका SBI account आज suspend हो जायेगा", "hi-IN", "caution", {"account_threat"}),
+    # brand + refund is a customer-care scam, not a delivery
+    ("Main Amazon customer care se bol raha hoon, aapka refund atak gaya hai, OTP bata dijiye", None, "danger",
+     {"otp_request", "impersonation"}),
+    # Latin nouns with Hindi verbs, arrests, fines, Skype
+    ("मैं TRAI से बोल रहा हूँ, दो घंटे में आपका mobile number बंद हो जाएगा", "hi-IN", "danger",
+     {"impersonation", "account_threat"}),
+    ("आपको गिरफ्तार किया जाएगा", "hi-IN", "caution", {"digital_arrest"}),
+    ("aapka parcel seize hua hai, isme ganja mila hai, fine bharna padega", None, "danger",
+     {"digital_arrest", "payment_request"}),
+    ("आप Skype download कीजिए, CBI officer आपसे बात करेंगे", "hi-IN", "caution", {"remote_access", "digital_arrest"}),
+    ("a case has been registered against you", "en-IN", "caution", {"digital_arrest"}),
+    ("ನಿಮ್ಮ ಹೆಸರಲ್ಲಿ ಕೇಸ್ ಇದೆ", "kn-IN", "caution", {"digital_arrest"}),
+    ("உங்க பேர்ல கேஸ் இருக்கு", "ta-IN", "caution", {"digital_arrest"}),
+    ("మీ పేరు మీద కేసు ఉంది", "te-IN", "caution", {"digital_arrest"}),
+    # OTP / CVV / UPI-collect without the word OTP, polite question forms
+    ("आपके फोन पे एक code आया होगा, वो बताइए", "hi-IN", "caution", {"otp_request"}),
+    ("aapke phone pe ek message aaya hoga, usme jo chhe digit ka number hai wo bata dijiye", None, "caution",
+     {"otp_request"}),
+    ("card ke peeche teen digit ka number bataiye", None, "caution", {"otp_request"}),
+    ("पैसे receive करने के लिए आपको UPI PIN डालना होगा", "hi-IN", "caution", {"otp_request"}),
+    ("ನಿಮ್ಮ ಅಕೌಂಟ್ ಬ್ಲಾಕ್ ಆಗುತ್ತೆ, OTP ಹೇಳ್ತೀರಾ", "kn-IN", "danger", {"account_threat", "otp_request"}),
+    ("మీ అకౌంట్ బ్లాక్ అయిపోతుంది, ఓటీపీ చెప్తారా", "te-IN", "danger", {"account_threat", "otp_request"}),
+    # sextortion, mistaken-transfer refund, investment / task scams, phishing link
+    ("Sir aapka video call recording hai mere paas, paise nahi bheje to aapke sabhi contacts ko bhej dunga", None,
+     "danger", {"urgency_secrecy", "payment_request"}),
+    ("आपका video viral कर देंगे, पचास हज़ार भेजो वरना YouTube पर डाल देंगे", "hi-IN", "danger",
+     {"urgency_secrecy", "payment_request"}),
+    ("Bhaiya galti se aapke account mein 5000 rupaye chale gaye, please wapas kar dijiye", None, "caution",
+     {"payment_request"}),
+    ("भैया गलती से आपके account में 5000 रुपये चले गए, please वापस कर दीजिए", "hi-IN", "caution", {"payment_request"}),
+    ("is WhatsApp group mein join kijiye, IPO allotment mein 300 percent return milega", None, "caution",
+     {"prize_job_offer"}),
+    ("आप hotel review का task करके रोज़ तीन हज़ार कमा सकते हैं", "hi-IN", "caution", {"prize_job_offer"}),
+    ("Telegram पर task मिलेगा, पहले थोड़ा invest करना होगा", "hi-IN", "danger", {"prize_job_offer", "payment_request"}),
+    ("link पर click करके details भरिए", "hi-IN", "caution", {"otp_request"}),
+    # a "nahi" elsewhere in the sentence is not safety advice
+    ("Main aapko pareshan nahi karunga bas OTP bata dijiye", None, "caution", {"otp_request"}),
+    ("Aapka paisa kahin nahi jayega bas OTP bata dijiye", None, "caution", {"otp_request"}),
+    ("आप digital arrest में हैं आप कुछ नहीं कर सकते", "hi-IN", "caution", {"digital_arrest"}),
+    ("उनके पास कोई रास्ता नहीं, आपके खिलाफ arrest warrant है अब कुछ नहीं हो सकता", "hi-IN", "caution", {"digital_arrest"}),
+    ("உங்களுக்கு வேற வழி இல்லை டிஜிட்டல் அரெஸ்ட்ல இருக்கீங்க", "ta-IN", "caution", {"digital_arrest"}),
+    ("ನಿಮಗೆ ಬೇರೆ ದಾರಿ ಇಲ್ಲ ನೀವು ಡಿಜಿಟಲ್ ಅರೆಸ್ಟ್ ಆಗಿದ್ದೀರಿ", "kn-IN", "caution", {"digital_arrest"}),
+    ("మీకు వేరే దారి లేదు మీరు డిజిటల్ అరెస్ట్ లో ఉన్నారు", "te-IN", "caution", {"digital_arrest"}),
+    ("উপায় নেই আপনি ডিজিটাল অ্যারেস্টে আছেন", "bn-IN", "caution", {"digital_arrest"}),
     # --- benign / safety advice: must stay safe
     ("My OTP for Swiggy delivery came, I gave it to the delivery guy", "en-IN", "safe", set()),
     ("police ne mere bhai ko help ki", None, "safe", set()),
@@ -90,6 +146,23 @@ EXTRA_CASES: list[tuple[str, str | None, str, set[str]]] = [
     ("डिजिटल अरेस्ट जैसा कुछ नहीं होता, पुलिस फ़ोन पर गिरफ़्तार नहीं करती", "hi-IN", "safe", set()),
     ("ఓటీపీ ఎవరికీ చెప్పకండి, బ్యాంక్ ఎప్పుడూ అడగదు", "te-IN", "safe", set()),
     ("ਆਪਣਾ ਓਟੀਪੀ ਕਿਸੇ ਨੂੰ ਨਾ ਦੱਸੋ", "pa-IN", "safe", set()),
+    # scam-awareness talk (PSAs, a relative warning about scams)
+    ("There is nothing called digital arrest, police will never call you on video", "en-IN", "safe", set()),
+    ("Beware of digital arrest scams. Police never ask for money on a video call", "en-IN", "safe", set()),
+    ("digital arrest naam ki koi cheez nahi hoti", None, "safe", set()),
+    ("डिजिटल अरेस्ट जैसी कोई चीज़ नहीं होती", "hi-IN", "safe", set()),
+    ("Agar koi digital arrest bole to samajh lo scam hai", None, "safe", set()),
+    ("ಡಿಜಿಟಲ್ ಅರೆಸ್ಟ್ ಅನ್ನೋದು ಇಲ್ಲ, ಪೊಲೀಸರು ಫೋನ್‌ನಲ್ಲಿ ಬಂಧಿಸುವುದಿಲ್ಲ", "kn-IN", "safe", set()),
+    ("ডিজিটাল অ্যারেস্ট বলে কিছু হয় না", "bn-IN", "safe", set()),
+    # family and daily life
+    ("Mera account block ho jayega bank wale ne bola, beta paise bhej do", None, "safe", set()),
+    ("Beta wifi ka password bata do", None, "safe", set()),
+    ("Netflix ka password bhej do na", None, "safe", set()),
+    ("Gas cylinder wala aaya hai, OTP bata do", None, "safe", set()),
+    ("मेरा फ़ोन नंबर बंद हो गया था, नया सिम लिया", "hi-IN", "safe", set()),
+    ("Main galti se aapke ghar aa gaya, wapas ja raha hoon", None, "safe", set()),
+    ("Bank kabhi OTP nahi maangta to kisi ko OTP mat batana", None, "safe", set()),
+    ("Download the IRCTC app to book tickets", "en-IN", "safe", set()),
 ]
 
 # Short multi-line calls: (name, language, lines, expected final level)
@@ -123,6 +196,23 @@ MINI_CALLS: list[tuple[str, str | None, list[str], str]] = [
         "नमस्ते, मैं Amazon से delivery boy बोल रहा हूँ",
         "आपका parcel गेट पर है, OTP बता दीजिए",
         "ठीक है, धन्यवाद"], "safe"),
+    # VAD splits sentences at short pauses: phrases must still match across two utterances
+    ("vad-split-hinglish", None, [
+        "Hello main CBI", "se bol raha hoon", "aapka account", "block ho jayega", "aapke phone par jo OTP aaya hai",
+        "woh bata dijiye"], "danger"),
+    ("vad-split-hindi-otp", "hi-IN", ["आपके फ़ोन पर एक ओटीपी आया होगा", "वो बताइये"], "caution"),
+    # one delivery word does not excuse every later OTP request
+    ("delivery-then-bank", "en-IN", [
+        "Your parcel delivery failed", "I am calling from the bank, your account will be blocked",
+        "tell me the OTP"], "danger"),
+    ("courier-otp-later", None, [
+        "aapka parcel deliver nahi ho paya", "aapka address galat hai", "OTP bataiye"], "caution"),
+    ("benign-gas-cylinder", None, [
+        "Namaste, Indane gas cylinder delivery ke liye aaya hoon", "OTP bata dijiye", "theek hai, thank you"], "safe"),
+    ("benign-family-warning", None, [
+        "Maine news mein dekha digital arrest ke baare mein", "CBI wale bolke call karte hain",
+        "paise transfer karwa lete hain", "kabhi mat dena"], "safe"),
+    ("benign-family-money", None, ["Beta 2000 rupaye bhej do", "jaldi bhejna aaj hi chahiye"], "safe"),
 ]
 
 

@@ -5,6 +5,10 @@ Both streams share one interface (StreamBase) and are async context managers:
     async with open_stream(StreamConfig(telephony=True), mock_lines) as s:
         await s.send_frame(frame)          # exactly 1024 bytes of s16le mono
         async for ev in s.events(): ...    # normalised dicts, see _normalise()
+
+Besides the SPEC's events, GnaniStream also yields {"type": "speech_start"} and {"type": "empty"} (an
+utterance that held no words), so a session can tell when no transcript is still on its way.
+Realtime STT takes exactly ONE language code or "indic-auto": a list closes the socket with 1008.
 """
 import asyncio
 import json
@@ -15,10 +19,12 @@ from websockets.asyncio.client import connect
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
 from app import config
-from app.gnani import GnaniError, parse_error
+from app.gnani import BACKOFF, GnaniError, parse_error
 
 STREAM_URL = "wss://api.vachana.ai/stt/v3/stream"   # tests point this at a local fake server
 FRAME_BYTES = 1024                                   # 512 samples s16le mono
+OPEN_TIMEOUT_S = 8.0       # per handshake attempt; the browser waits longer (static/app.js CONNECT_TIMEOUT_MS)
+CLOSE_TIMEOUT_S = 2.0      # don't hang on a slow close handshake when a call ends
 
 
 @dataclass
@@ -54,6 +60,10 @@ def _check_frame(frame: bytes) -> None:
 
 
 class StreamBase:
+    # True when events() reports "speech_start"/"processing" for an utterance before its transcript,
+    # so the session can tell "nothing more is coming" apart from "a transcript is still on its way".
+    reports_speech = False
+
     async def __aenter__(self):
         await self.open()
         return self
@@ -75,19 +85,21 @@ def _normalise(msg: dict) -> dict | None:
     kind = msg.get("type")
     if kind == "transcript":
         text = (msg.get("text") or "").strip()
-        if not text:                 # VAD fired on noise: nothing useful to show
-            return None
+        if not text:                 # VAD fired on noise: nothing to show, but the utterance is done
+            return {"type": "empty"}
         return {"type": "transcript", "text": text, "language": msg.get("detected_language_code"),
                 "index": int(msg.get("segment_index") or 0)}
     if kind == "error":
         # A server error alone may be recoverable; if the socket then dies, events() adds a fatal one.
         return {"type": "error", "message": str(msg.get("message") or "Gnani stream error"), "fatal": False}
-    if kind in ("connected", "processing"):
+    if kind in ("connected", "processing", "speech_start"):
         return {"type": kind}
-    return None                      # speech_start, settings_updated, ...
+    return None                      # settings_updated, ...
 
 
 class GnaniStream(StreamBase):
+    reports_speech = True
+
     def __init__(self, cfg: StreamConfig, url: str | None = None):
         self.cfg = cfg
         self.url = url or STREAM_URL
@@ -95,13 +107,20 @@ class GnaniStream(StreamBase):
         self._closing = False
 
     async def open(self) -> None:
-        try:
-            self._ws = await connect(self.url, additional_headers=build_headers(self.cfg, config.gnani_key()),
-                                     open_timeout=15)
-        except InvalidStatus as e:   # handshake refused, e.g. 401 bad key / 429
-            raise parse_error(e.response.status_code, e.response.body or b"") from e
-        except (OSError, asyncio.TimeoutError) as e:
-            raise GnaniError(0, "NETWORK_ERROR", f"could not connect: {e}") from e
+        """Connect. A handshake refused with 429 (rate limited) is retried with the REST backoff."""
+        headers = build_headers(self.cfg, config.gnani_key())
+        for attempt in range(len(BACKOFF) + 1):
+            try:
+                self._ws = await connect(self.url, additional_headers=headers,
+                                         open_timeout=OPEN_TIMEOUT_S, close_timeout=CLOSE_TIMEOUT_S)
+                return
+            except InvalidStatus as e:   # handshake refused, e.g. 401 bad key / 429
+                if e.response.status_code == 429 and attempt < len(BACKOFF):
+                    await asyncio.sleep(BACKOFF[attempt])
+                    continue
+                raise parse_error(e.response.status_code, e.response.body or b"") from e
+            except (OSError, asyncio.TimeoutError) as e:
+                raise GnaniError(0, "NETWORK_ERROR", f"could not connect: {e}") from e
 
     async def send_frame(self, frame: bytes) -> None:
         _check_frame(frame)

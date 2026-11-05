@@ -9,9 +9,15 @@
   // ---------------------------------------------------------------- constants
   const FRAME_BYTES = 1024;          // 512 samples s16le @ 16 kHz = 32 ms
   const FRAME_MS = 32;
-  const MAX_SESSION_MS = 15 * 60 * 1000;
-  const SUMMARY_WAIT_MS = 25000;     // after "stop": server waits <= 3 s + LLM summary (<= 20 s)
-  const CONNECT_TIMEOUT_MS = 10000;
+  const MAX_SESSION_MS = 15 * 60 * 1000;   // backstop; the server ends a check at 14.5 min on its own
+  // After "stop" the server needs at most ~18 s: settle 3 + stream close 2 + 1 + summary 12 (app/session.py).
+  const SUMMARY_WAIT_MS = 25000;
+  // The server's Gnani handshake takes at most ~12 s: 8 s timeout + 3.5 s of 429 backoff (app/gnani_stream.py).
+  const CONNECT_TIMEOUT_MS = 20000;
+  const ALERT_AUDIO_WAIT_MS = 2500;  // wait this long for the Timbre clip, then use the browser's voice
+  const ALERT_PAUSE_MS = 300;        // gap between two queued alert voices
+  const ECHO_TAIL_MS = 800;          // mic mode: keep sending silence this long after our voice ends
+  const DEMO_STOP_DELAY_MS = 300;    // demo audio ended: send "stop" this soon after
 
   const LEVELS = {
     idle: { en: 'Not listening', hi: 'अभी सुन नहीं रहा' },
@@ -88,9 +94,9 @@
 
   const validLang = (code) => (typeof code === 'string' && /^[a-z]{2,3}(-[A-Za-z]{2})?$/.test(code) ? code : null);
   const langs = () => (S.status && S.status.languages && typeof S.status.languages === 'object' ? S.status.languages : FALLBACK_LANGS);
-  const langNative = (code) => {
+  const langName = (code) => {
     const L = code && langs()[code];
-    return L ? (L.native || L.name || code) : (code || '');
+    return L ? (L.name || L.native || code) : (code || '');
   };
   const catLabel = (key) => {
     const c = CATS[key];
@@ -109,6 +115,7 @@
   const S = {
     status: null,
     demos: [],
+    demoResults: {},   // demo id -> verdict, shown on the card after that demo has played
     tab: 'live',
     session: null,       // current live/demo session (see startSession)
     seq: 0,
@@ -117,9 +124,13 @@
     shownScore: 0,
     analyzing: null,     // AbortController for /api/analyze
     file: null,
-    alertAudio: null,
-    lastAlert: null,
+    lastAlert: null,     // the alert entry shown last (for "Hear it again")
+    ctx: null,           // one AudioContext for the whole app: unlocked by the first tap, never closed
+    worklet: null,       // promise: pcm-worklet.js loaded into S.ctx
   };
+
+  // Alert voices play one at a time, in arrival order (see the alerts section).
+  const V = { byId: new Map(), queue: [], current: null, closeWhenIdle: false, pauseTimer: null };
 
   // ---------------------------------------------------------------- status line
   async function loadStatus() {
@@ -147,20 +158,29 @@
     fillLanguages();
   }
 
-  function fillLanguages() {
-    const sel = $('warnLang');
+  function fillLanguageSelect(sel, autoValue, autoLabel, storageKey, defaultValue) {
     let saved = null;
-    try { saved = localStorage.getItem('kavach.warn'); } catch (e) { /* storage blocked */ }
-    sel.replaceChildren(el('option', { value: 'auto' }, "Auto (call language)"));
+    try { saved = localStorage.getItem(storageKey); } catch (e) { /* storage blocked */ }
+    sel.replaceChildren(el('option', { value: autoValue }, autoLabel));
     for (const [code, L] of Object.entries(langs())) {
       const name = L && L.name ? L.name : code;
       const native = L && L.native ? L.native : name;
       sel.append(el('option', { value: code }, native === name ? name : native + ' (' + name + ')'));
     }
-    if (saved && [...sel.options].some((o) => o.value === saved)) sel.value = saved;
+    const has = (v) => v && [...sel.options].some((o) => o.value === v);
+    if (has(saved)) sel.value = saved;
+    else if (has(defaultValue)) sel.value = defaultValue;
+  }
+
+  function fillLanguages() {
+    // English by default; "Same as the call" (warn in the caller's language) is one tap away.
+    fillLanguageSelect($('warnLang'), 'auto', 'Same as the call', 'kavach.warn2', 'en-IN');
+    fillLanguageSelect($('callLang'), 'indic-auto', 'Auto-detect', 'kavach.callLang');
   }
 
   const warnLang = () => $('warnLang').value || 'auto';
+  // Realtime STT takes exactly one language (or indic-auto). Demo calls use their own language server-side.
+  const callLang = () => $('callLang').value || 'indic-auto';
 
   // ---------------------------------------------------------------- tabs
   function selectTab(name, focus) {
@@ -231,9 +251,7 @@
     }
     const live = S.status && !S.status.gnani_mock;
     list.replaceChildren(...S.demos.map((d) => {
-      const isScam = d.label !== 'legit';
       const title = String(d.title || d.id || 'Demo call');
-      const native = d.title_native && d.title_native !== d.title ? String(d.title_native) : null;
       const audioTag = d.has_audio ? 'Phone audio' : 'Mock audio';
       const btn = el('button', {
         class: 'demo-play', type: 'button', 'aria-label': 'Play demo: ' + title, dataset: { id: String(d.id) },
@@ -243,18 +261,39 @@
           else startSession('demo', d);
         },
       }, icon('play'), el('span', { class: 'demo-play-label' }, 'Play'));
-      return el('li', { class: 'demo-card', dataset: { id: String(d.id), label: isScam ? 'scam' : 'legit' } },
+      // No scam/legit label up front: the verdict appears on the card only after Kavach has heard the call.
+      const card = el('li', { class: 'demo-card', dataset: { id: String(d.id) } },
         el('div', { class: 'demo-body' },
           el('div', { class: 'badges' },
-            el('span', { class: 'badge badge-' + (isScam ? 'scam' : 'legit') }, isScam ? 'SCAM' : 'LEGIT'),
-            el('span', { class: 'badge badge-lang', lang: validLang(d.language) }, langNative(d.language) || 'Auto'),
-            el('span', { class: 'badge badge-audio' }, audioTag)),
+            el('span', { class: 'badge badge-lang' }, langName(d.language) || 'Auto'),
+            el('span', { class: 'badge badge-audio' }, audioTag),
+            el('span', { class: 'badge badge-result', hidden: true })),
           el('h3', { class: 'demo-title' }, title),
-          native ? el('p', { class: 'demo-native', lang: validLang(d.language) }, native) : null,
           (!d.has_audio && live) ? el('p', { class: 'demo-note' }, 'No demo audio yet: run scripts/make_demo_audio.py, or the live STT will hear silence.') : null),
         btn);
+      paintDemoResult(card, S.demoResults[String(d.id)]);
+      return card;
     }));
     syncDemoButtons();
+  }
+
+  // After a demo call: show what Kavach decided, on that card.
+  function paintDemoResult(card, verdict) {
+    const v = VERDICTS[verdict];
+    const b = card.querySelector('.badge-result');
+    if (!v || !b) return;
+    card.dataset.result = v.level;
+    b.textContent = v.level === 'safe' ? 'Kavach: looks safe' : v.level === 'danger' ? 'Kavach: scam' : 'Kavach: suspicious';
+    b.className = 'badge badge-result badge-' + v.level;
+    b.hidden = false;
+  }
+
+  function revealDemoResult(s, m) {
+    if (!s || !s.demo || !m || !VERDICTS[m.verdict]) return;
+    const id = String(s.demo.id);
+    S.demoResults[id] = m.verdict;
+    const card = [...document.querySelectorAll('.demo-card[data-id]')].find((c) => c.dataset.id === id);
+    if (card) paintDemoResult(card, m.verdict);
   }
 
   function syncDemoButtons() {
@@ -322,7 +361,6 @@
     $('gaugeFill').style.strokeDashoffset = String(100 - score);
     $('needle').style.transform = 'rotate(' + (-90 + score * 1.8) + 'deg)';
     $('levelLabel').textContent = LEVELS[level].en;
-    $('levelLabelHi').textContent = LEVELS[level].hi;
     const rm = $('riskMeter');
     rm.setAttribute('aria-valuenow', String(score));
     rm.setAttribute('aria-valuetext', score + ' out of 100, ' + LEVELS[level].en);
@@ -374,9 +412,7 @@
       if (typeof c !== 'string' || seen.has(c)) continue;
       seen.add(c);
       const L = catLabel(c);
-      items.push(el('li', { class: 'chip', dataset: { cat: c } },
-        el('span', { class: 'chip-en' }, L.en),
-        L.hi ? el('span', { class: 'chip-hi', lang: 'hi' }, L.hi) : null));
+      items.push(el('li', { class: 'chip', dataset: { cat: c } }, el('span', { class: 'chip-en' }, L.en)));
     }
     ul.replaceChildren(...items);
   }
@@ -407,7 +443,7 @@
       if (r.a < pos) continue; // skip overlaps
       if (r.a > pos) p.append(document.createTextNode(chars.slice(pos, r.a).join('')));
       const lab = catLabel(r.cat);
-      const tip = lab.hi ? lab.en + ' / ' + lab.hi : lab.en;
+      const tip = lab.en;
       const mark = el('mark', { class: 'flag', tabindex: '0', title: tip, dataset: { tip, cat: r.cat } });
       mark.textContent = chars.slice(r.a, r.b).join('');
       p.append(mark);
@@ -428,6 +464,21 @@
         s.lineCursor = i + 1;
         return s.timeline[i].speaker;
       }
+    }
+    // Live Gnani never returns the script text verbatim (code-mix, VAD splits/merges lines): go by timing.
+    // A transcript arrives after its line ends, so take the latest unused line that has already ended.
+    if (s.media && !s.mock) {
+      const t = s.media.currentTime - 0.3;
+      let pick = -1;
+      for (let i = 0; i < s.timeline.length; i++) {
+        if (!s.usedLines.has(i) && s.timeline[i].end <= t && (pick < 0 || s.timeline[i].end > s.timeline[pick].end)) pick = i;
+      }
+      if (pick >= 0) { s.usedLines.add(pick); return s.timeline[pick].speaker; }
+      // Every ended line is taken: VAD split one, so this is the rest of the latest ended line.
+      for (let i = s.timeline.length - 1; i >= 0; i--) if (s.timeline[i].end <= t) return s.timeline[i].speaker;
+      pick = s.timeline.findIndex((_, i) => !s.usedLines.has(i));   // nothing ended yet: the line being spoken
+      if (pick >= 0) { s.usedLines.add(pick); return s.timeline[pick].speaker; }
+      return null;
     }
     if (s.mock && s.lineCursor < s.timeline.length) {
       const i = s.lineCursor++;
@@ -451,7 +502,7 @@
     const meta = el('div', { class: 'bubble-meta' },
       el('span', { class: 'who' }, who),
       tSec != null ? el('span', { class: 'time' }, fmtTime(tSec)) : null,
-      lang ? el('span', { class: 'blang' }, langNative(lang)) : null,
+      lang ? el('span', { class: 'blang' }, langName(lang)) : null,
       nFlags ? el('span', { class: 'bflag' }, icon('alert'), nFlags === 1 ? '1 warning sign' : nFlags + ' warning signs') : null);
     const li = el('li', {
       class: 'bubble' + (speaker ? ' from-' + speaker : '') + (nFlags ? ' flagged' : ''),
@@ -472,13 +523,18 @@
   }
 
   // ---------------------------------------------------------------- alerts
+  // The overlay/banner shows the moment an "alert" arrives. Its voice is the Timbre clip: inside the alert
+  // when the server had it cached, else an "alert_audio" message with the same id. If that clip hasn't
+  // come within ALERT_AUDIO_WAIT_MS the browser's own voice speaks instead (never both). Voices never cut
+  // each other off: they queue, except that a danger alert interrupts a caution voice.
   function showAlert(m, s) {
     const level = m.level === 'danger' ? 'danger' : 'caution';
     const text = stripTags(m.text);
     const lang = validLang(m.language);
     const L = catLabel(m.category);
-    const catText = L.hi ? L.en + ' / ' + L.hi : L.en;
-    S.lastAlert = { m, s };
+    const catText = L.en;
+    // English wording for viewers who don't read the call's language (null when the alert is already English).
+    const textEn = typeof m.text_en === 'string' && m.text_en.trim() && m.text_en.trim() !== text ? stripTags(m.text_en) : '';
 
     $('srAlert').textContent = (level === 'danger' ? 'Scam alert. ' : 'Be careful. ') + text;
 
@@ -488,6 +544,8 @@
       const t = $('alarmText');
       t.textContent = text;
       if (lang) t.setAttribute('lang', lang); else t.removeAttribute('lang');
+      $('alarmEn').textContent = textEn;
+      $('alarmEn').hidden = !textEn;
       openAlarm();
       vibrate([380, 140, 380, 140, 700]);
     } else {
@@ -495,50 +553,168 @@
       const bt = $('bannerText');
       bt.textContent = text;
       if (lang) bt.setAttribute('lang', lang); else bt.removeAttribute('lang');
+      $('bannerEn').textContent = textEn;
+      $('bannerEn').hidden = !textEn;
       openBanner();
       vibrate([220, 120, 220]);
     }
-    speakAlert(m, s);
+    queueVoice(m, s, level);
   }
 
   function vibrate(pattern) {
     try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* not supported */ }
   }
 
+  const cleanB64 = (v) => {
+    const b64 = typeof v === 'string' ? v.replace(/\s+/g, '') : '';
+    return b64 && /^[A-Za-z0-9+/=]+$/.test(b64) ? b64 : null;
+  };
+
+  function queueVoice(m, s, level) {
+    const id = Number.isInteger(m.id) ? m.id : null;
+    const entry = { id, m, s, level, audio: cleanB64(m.audio_b64), ready: false, started: false, timer: null };
+    S.lastAlert = entry;
+    if (entry.audio) entry.ready = true;
+    else if (id == null || m.audio_pending === false) entry.ready = true;   // no clip is coming: speak now
+    else {
+      entry.timer = setTimeout(() => { entry.ready = true; pumpVoices(); }, ALERT_AUDIO_WAIT_MS);
+      V.byId.set(id, entry);
+    }
+    if (level === 'danger') V.queue = V.queue.filter((e) => e.level === 'danger');   // drop waiting cautions
+    V.queue.push(entry);
+    V.closeWhenIdle = false;
+    pumpVoices();
+  }
+
+  // The Timbre clip for an alert shown earlier (audio_b64 null: TTS failed, use the browser voice now).
+  function onAlertAudio(m) {
+    const entry = Number.isInteger(m.id) ? V.byId.get(m.id) : null;
+    if (!entry) return;
+    V.byId.delete(m.id);
+    if (entry.started) return;                           // the browser voice already spoke it
+    clearTimeout(entry.timer);
+    entry.audio = cleanB64(m.audio_b64);
+    entry.ready = true;
+    pumpVoices();
+  }
+
+  function pumpVoices() {
+    const cur = V.current;
+    const next = V.queue[0];
+    if (cur && next && cur.level !== 'danger' && next.level === 'danger' && next.ready) {
+      stopCurrentVoice();                                // a scam warning beats a "be careful"
+    } else if (cur || V.pauseTimer) {
+      return;
+    }
+    if (!next) {
+      if (V.closeWhenIdle) { V.closeWhenIdle = false; closeAlarmForSummary(); }
+      return;
+    }
+    if (!next.ready) return;                             // keep the order: wait for its clip (<= 2.5 s)
+    V.queue.shift();
+    playVoice(next);
+  }
+
+  function voiceDone(entry) {
+    if (V.current !== entry) return;
+    V.current = null;
+    duck(entry.s, false);
+    clearTimeout(V.pauseTimer);
+    V.pauseTimer = setTimeout(() => { V.pauseTimer = null; pumpVoices(); }, ALERT_PAUSE_MS);
+  }
+
+  function playVoice(entry) {
+    entry.started = true;
+    clearTimeout(entry.timer);
+    if (entry.id != null) V.byId.delete(entry.id);
+    V.current = entry;
+    duck(entry.s, true);
+    if (entry.audio) playClip(entry);
+    else speakFallback(entry);
+  }
+
+  function b64ToBuffer(b64) {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  // Through the app's AudioContext, which the first tap unlocked: on iOS a later new Audio().play() is blocked.
+  function playClip(entry) {
+    const ctx = S.ctx;
+    const fail = () => { if (V.current === entry && !entry.node) speakFallback(entry); };
+    if (!ctx || ctx.state === 'closed') { playClipElement(entry); return; }
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    let buf;
+    try { buf = b64ToBuffer(entry.audio); } catch (e) { fail(); return; }
+    decodeAudio(ctx, buf).then((audioBuf) => {
+      if (V.current !== entry) return;                   // stopped meanwhile
+      const src = ctx.createBufferSource();
+      src.buffer = audioBuf;
+      src.connect(ctx.destination);
+      src.onended = () => voiceDone(entry);
+      entry.node = src;
+      src.start();
+    }).catch(fail);
+  }
+
+  function playClipElement(entry) {                      // no AudioContext (e.g. very old browser)
+    const a = new Audio('data:audio/wav;base64,' + entry.audio);
+    entry.node = a;
+    a.addEventListener('ended', () => voiceDone(entry));
+    a.play().catch(() => { entry.node = null; if (V.current === entry) speakFallback(entry); });
+  }
+
+  function stopCurrentVoice() {
+    const cur = V.current;
+    if (!cur) return;
+    V.current = null;
+    const n = cur.node;
+    cur.node = null;
+    if (n) {
+      try { if (typeof n.stop === 'function') { n.onended = null; n.stop(); } else n.pause(); } catch (e) { /* ignore */ }
+    }
+    if (cur.utter) { cur.utter.onend = cur.utter.onerror = null; }
+    try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+    duck(cur.s, false);
+  }
+
+  // Stop everything: the voice playing, queued voices, pending clips.
+  function stopAlertVoice() {
+    for (const e of V.queue) clearTimeout(e.timer);
+    for (const e of V.byId.values()) clearTimeout(e.timer);
+    V.queue = [];
+    V.byId.clear();
+    clearTimeout(V.pauseTimer);
+    V.pauseTimer = null;
+    V.closeWhenIdle = false;
+    stopCurrentVoice();
+  }
+
+  function replayAlert() {
+    const last = S.lastAlert;
+    if (!last) return;
+    stopAlertVoice();
+    unlockAudio();                                       // this is a tap: make sure audio may play
+    playVoice({ ...last, ready: true, started: false, timer: null, node: null, utter: null, id: null });
+  }
+
   function duck(s, on) {
     if (!s) return;
-    if (s.speakerGain && s.ctx && s.ctx.state !== 'closed') {
-      try { s.speakerGain.gain.setTargetAtTime(on ? 0.18 : 1, s.ctx.currentTime, 0.08); } catch (e) { /* closed */ }
+    if (s.speakerGain && S.ctx && S.ctx.state !== 'closed') {
+      try { s.speakerGain.gain.setTargetAtTime(on ? 0.18 : 1, S.ctx.currentTime, 0.08); } catch (e) { /* closed */ }
     }
-    // In mic mode, don't let Kavach transcribe its own spoken warning: send silence while it speaks.
+    // In mic mode, don't let Kavach transcribe its own spoken warning: send silence while it speaks, and a
+    // little longer for the speaker's latency and the room's echo (the server also drops echoed transcripts).
     if (s.source === 'mic') {
-      s.suppress = on;
       clearTimeout(s.suppressTimer);
-      if (on) s.suppressTimer = setTimeout(() => { s.suppress = false; }, 15000);
-    }
-  }
-
-  function stopAlertVoice() {
-    if (S.alertAudio) {
-      try { S.alertAudio.pause(); } catch (e) { /* ignore */ }
-      S.alertAudio = null;
-    }
-    try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
-  }
-
-  function speakAlert(m, s) {
-    stopAlertVoice();
-    const b64 = typeof m.audio_b64 === 'string' ? m.audio_b64.replace(/\s+/g, '') : '';
-    if (b64 && /^[A-Za-z0-9+/=]+$/.test(b64)) {
-      const a = new Audio('data:audio/wav;base64,' + b64);
-      S.alertAudio = a;
-      const done = () => { duck(s, false); if (S.alertAudio === a) S.alertAudio = null; };
-      a.addEventListener('ended', done);
-      a.addEventListener('error', () => { done(); speakFallback(m, s); });
-      duck(s, true);
-      a.play().catch(() => { done(); speakFallback(m, s); });
-    } else {
-      speakFallback(m, s);
+      if (on) {
+        s.suppress = true;
+        s.suppressTimer = setTimeout(() => { s.suppress = false; }, 20000);
+      } else if (s.suppress) {
+        s.suppressTimer = setTimeout(() => { s.suppress = false; }, ECHO_TAIL_MS);
+      }
     }
   }
 
@@ -547,12 +723,11 @@
     try { voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : []; } catch (e) { voices = []; }
   }
 
-  function speakFallback(m, s) {
+  function speakFallback(entry) {
     const synth = window.speechSynthesis;
-    if (!synth || typeof window.SpeechSynthesisUtterance !== 'function') return;
-    const text = stripTags(m.text);
-    if (!text) return;
-    const lang = validLang(m.language) || 'hi-IN';
+    const text = stripTags(entry.m.text);
+    if (!synth || typeof window.SpeechSynthesisUtterance !== 'function' || !text) { voiceDone(entry); return; }
+    const lang = validLang(entry.m.language) || 'hi-IN';
     if (!voices.length) loadVoices();
     const want = lang.toLowerCase();
     const base = want.slice(0, 2);
@@ -562,10 +737,45 @@
     u.lang = lang;
     if (v) u.voice = v;
     u.rate = 0.95;
-    u.onstart = () => duck(s, true);
-    u.onend = () => duck(s, false);
-    u.onerror = () => duck(s, false);
-    try { synth.cancel(); synth.speak(u); } catch (e) { duck(s, false); }
+    u.onend = () => voiceDone(entry);
+    u.onerror = () => voiceDone(entry);
+    entry.utter = u;
+    try { synth.cancel(); synth.speak(u); } catch (e) { voiceDone(entry); }
+  }
+
+  // ---------------------------------------------------------------- audio unlock (iOS)
+  // iOS only lets audio start inside a tap. So the first Play/Start tap creates and resumes one AudioContext
+  // that lives as long as the page (demo audio and alert clips play through it later, outside any tap),
+  // and primes speechSynthesis with a silent utterance so the fallback voice may speak later too.
+  function audioCtx() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) throw new Error('audio-unsupported');
+    if (!S.ctx || S.ctx.state === 'closed') {
+      S.ctx = new AC({ latencyHint: 'interactive' });
+      S.worklet = null;
+    }
+    if (S.ctx.state === 'suspended') S.ctx.resume().catch(() => {});
+    return S.ctx;
+  }
+
+  let speechPrimed = false;
+  function unlockAudio() {
+    try { audioCtx(); } catch (e) { /* reported when the session needs it */ }
+    const synth = window.speechSynthesis;
+    if (speechPrimed || !synth || typeof window.SpeechSynthesisUtterance !== 'function') return;
+    speechPrimed = true;
+    try {
+      const u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      synth.speak(u);
+    } catch (e) { /* ignore */ }
+  }
+
+  function decodeAudio(ctx, data) {
+    return new Promise((resolve, reject) => {
+      const p = ctx.decodeAudioData(data, resolve, reject);   // old Safari: callbacks only
+      if (p && typeof p.then === 'function') p.then(resolve, reject);
+    });
   }
 
   // danger overlay
@@ -582,6 +792,17 @@
     }
     setTimeout(() => $('alarmOk').focus({ preventScroll: true }), 60);
   }
+  // The call is over and the summary is in: take the red overlay down (after its voice finished).
+  function closeAlarmForSummary() {
+    if ($('dangerOverlay').hidden) return;
+    closeAlarm(true);
+    const box = $('summary');
+    if (!box.hidden) {
+      box.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+      box.focus({ preventScroll: true });
+    }
+  }
+
   function closeAlarm(silent) {
     const o = $('dangerOverlay');
     if (o.hidden) return;
@@ -621,7 +842,7 @@
     const v = VERDICTS[m.verdict] || VERDICTS.suspicious;
     const box = $('summary');
     box.dataset.level = v.level;
-    $('verdict').replaceChildren(el('span', null, v.en), el('span', { class: 'hi', lang: 'hi' }, v.hi));
+    $('verdict').replaceChildren(el('span', null, v.en));
     let score = Math.round(Number(m.score));
     $('summaryScore').textContent = Number.isFinite(score) ? 'Risk score ' + clamp(score, 0, 100) + ' / 100' : '';
     renderChips($('summaryChips'), Array.isArray(m.categories) ? m.categories : []);
@@ -681,17 +902,19 @@
     return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/listen';
   }
 
+  // Called straight from a tap: everything before the first await runs inside the user gesture.
   async function startSession(source, demo) {
     if (S.analyzing) { S.analyzing.abort(); S.analyzing = null; }
     if (S.session && S.session.state !== 'ended') finish(S.session, true);
     hideNotice();
     resetMonitor();
     stopAlertVoice();
+    unlockAudio();
     if (!voices.length) loadVoices();
 
     const s = {
       id: ++S.seq, source, demo: demo || null, state: 'connecting', mock: null,
-      ws: null, ctx: null, node: null, srcNode: null, micStream: null, media: null, speakerGain: null,
+      ws: null, wsOpen: false, ctx: null, node: null, srcNode: null, micStream: null, media: null, speakerGain: null,
       timers: new Set(), intervals: new Set(), t0: 0, gotSummary: false, errorShown: false,
       suppress: false, suppressTimer: null, level: 0,
       timeline: demo ? demoTimeline(demo) : null, usedLines: new Set(), lineCursor: 0,
@@ -713,13 +936,14 @@
   }
 
   async function makeAudioGraph(s) {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) throw new Error('audio-unsupported');
-    const ctx = new AC({ latencyHint: 'interactive' });
+    const ctx = audioCtx();                          // the app-wide context (unlocked by this tap)
     s.ctx = ctx;
     if (!ctx.audioWorklet || typeof window.AudioWorkletNode !== 'function') throw new Error('worklet-unsupported');
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-    await ctx.audioWorklet.addModule('/static/pcm-worklet.js');
+    if (!S.worklet) {
+      S.worklet = ctx.audioWorklet.addModule('/static/pcm-worklet.js');
+      S.worklet.catch(() => { if (S.ctx === ctx) S.worklet = null; });
+    }
+    await S.worklet;
     if (ctx.state === 'closed') throw new Error('Audio stopped.');
     const node = new AudioWorkletNode(ctx, 'pcm-downsampler', {
       numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
@@ -750,26 +974,53 @@
     }
   }
 
+  // Demo audio is decoded up front and played as an AudioBuffer on the app's (already unlocked) context,
+  // so it can start when the server says "ready", seconds after the tap. An <audio> element can't on iOS.
   async function setupDemoAudio(s) {
     const ctx = await makeAudioGraph(s);
-    const media = new Audio();
-    media.preload = 'auto';
-    media.src = '/demo-audio/' + encodeURIComponent(s.demo.id) + '.wav';
-    s.media = media;
-    s.srcNode = ctx.createMediaElementSource(media);
+    let buffer;
+    try {
+      const r = await fetch('/demo-audio/' + encodeURIComponent(s.demo.id) + '.wav');
+      if (!r.ok) throw new Error(String(r.status));
+      buffer = await decodeAudio(ctx, await r.arrayBuffer());
+    } catch (e) {
+      throw new Error('Could not load the demo audio file.');
+    }
+    if (S.session !== s || s.state === 'ended') return;
     s.speakerGain = ctx.createGain();
-    s.srcNode.connect(s.speakerGain).connect(ctx.destination);   // speakers
-    s.srcNode.connect(s.node);                                    // and the worklet -> WS
-    media.addEventListener('ended', () => {
-      if (S.session === s && s.state === 'live') later(s, 1500, () => stopSession());
-    });
-    media.addEventListener('error', () => {
-      if (S.session === s && s.state !== 'ended' && s.state !== 'stopping') {
-        showNotice('Could not load the demo audio file.', true);
-        s.errorShown = true;
-        stopSession();
-      }
-    });
+    s.speakerGain.connect(ctx.destination);
+    s.media = makePlayer(s, ctx, buffer);
+  }
+
+  // A tiny stand-in for <audio>: play() / stop() / currentTime / an end callback.
+  function makePlayer(s, ctx, buffer) {
+    const p = {
+      src: null, startAt: 0, duration: buffer.duration,
+      get currentTime() { return p.src ? clamp(ctx.currentTime - p.startAt, 0, p.duration) : 0; },
+      play() {
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(s.speakerGain);                  // speakers (ducked while an alert speaks)
+        if (s.node) src.connect(s.node);             // and the worklet -> WS
+        src.onended = () => {
+          if (p.src !== src) return;
+          if (S.session === s && s.state === 'live') later(s, DEMO_STOP_DELAY_MS, () => stopSession());
+        };
+        p.startAt = ctx.currentTime + 0.05;
+        src.start(p.startAt);
+        p.src = src;
+        return ctx.state === 'running' ? Promise.resolve() : ctx.resume();
+      },
+      stop() {
+        const src = p.src;
+        p.src = null;
+        if (!src) return;
+        src.onended = null;
+        try { src.stop(); } catch (e) { /* not started */ }
+        try { src.disconnect(); } catch (e) { /* ignore */ }
+      },
+    };
+    return p;
   }
 
   function stopTracks(stream) {
@@ -805,9 +1056,10 @@
     s.ws = ws;
     ws.onopen = () => {
       if (S.session !== s || s.state === 'ended') { try { ws.close(1000); } catch (e) { /* ignore */ } return; }
+      s.wsOpen = true;
       ws.send(JSON.stringify({
         type: 'start', source: s.source, demo_id: s.demo ? String(s.demo.id) : null,
-        language: 'indic-auto', warn_language: warnLang(),
+        language: s.source === 'mic' ? callLang() : 'indic-auto', warn_language: warnLang(),
       }));
     };
     ws.onmessage = (e) => {
@@ -820,7 +1072,9 @@
     ws.onclose = (e) => onSocketClose(s, e);
     later(s, CONNECT_TIMEOUT_MS, () => {
       if (s.state === 'connecting') {
-        showNotice('Could not reach the Kavach server. Is it running?', true);
+        // The socket opened, so our server is fine: it's still waiting on Gnani's speech service.
+        showNotice(s.wsOpen ? 'The speech service is slow to respond. Please try again in a moment.'
+          : 'Could not reach the Kavach server. Is it running?', true);
         s.errorShown = true;
         finish(s);
       }
@@ -834,9 +1088,13 @@
       case 'transcript': addTranscript(m, s, s.t0 ? (performance.now() - s.t0) / 1000 : null); break;
       case 'risk': setRisk(m); break;
       case 'alert': showAlert(m, s); break;
+      case 'alert_audio': onAlertAudio(m); break;
       case 'summary':
         s.gotSummary = true;
         renderSummary(m);
+        revealDemoResult(s, m);
+        // The red overlay would hide the summary: close it once its voice is done.
+        if (!V.current && !V.queue.length) closeAlarmForSummary(); else V.closeWhenIdle = true;
         if (s.state === 'live') { s.state = 'stopping'; stopCapture(s); renderSessionUI(); }
         later(s, 3000, () => finish(s)); // server closes right after; this is a fallback
         break;
@@ -847,7 +1105,7 @@
           s.errorShown = true;
           if (s.state === 'connecting') { finish(s); break; }
           if (s.state === 'live') { s.state = 'stopping'; stopCapture(s); renderSessionUI(); }
-          later(s, 5000, () => finish(s));
+          later(s, SUMMARY_WAIT_MS, () => finish(s));   // the server still sends a summary, then closes
         }
         break;
       }
@@ -974,14 +1232,10 @@
     stopTracks(s.micStream);
     s.micStream = null;
     if (s.media) {
-      try { s.media.pause(); s.media.removeAttribute('src'); s.media.load(); } catch (e) { /* ignore */ }
+      s.media.stop();
       s.media = null;
     }
-    if (s.ctx) {
-      const ctx = s.ctx;
-      s.ctx = null;
-      if (ctx.state !== 'closed') ctx.close().catch(() => {});
-    }
+    s.ctx = null;                    // the AudioContext is app-wide and stays open (alerts play through it)
     s.level = 0;
     paintVu(s);
   }
@@ -1018,6 +1272,7 @@
     for (const id of ['live', 'demo', 'file']) $('panel-' + id).hidden = active || id !== S.tab;
     for (const t of document.querySelectorAll('.tab')) t.disabled = active;
     $('warnLang').disabled = active;
+    $('callLang').disabled = active;
     syncDemoButtons();
     if (!active) { $('clock').textContent = '0:00'; return; }
 
@@ -1154,10 +1409,13 @@
     $('noticeClose').addEventListener('click', hideNotice);
     $('bannerClose').addEventListener('click', () => { hideBanner(); stopAlertVoice(); if (S.lastAlert) duck(S.lastAlert.s, false); });
     $('alarmOk').addEventListener('click', () => closeAlarm(false));
-    $('alarmReplay').addEventListener('click', () => { if (S.lastAlert) speakAlert(S.lastAlert.m, S.lastAlert.s); });
+    $('alarmReplay').addEventListener('click', replayAlert);
     $('copyBtn').addEventListener('click', copyShare);
     $('warnLang').addEventListener('change', () => {
-      try { localStorage.setItem('kavach.warn', warnLang()); } catch (e) { /* storage blocked */ }
+      try { localStorage.setItem('kavach.warn2', warnLang()); } catch (e) { /* storage blocked */ }
+    });
+    $('callLang').addEventListener('change', () => {
+      try { localStorage.setItem('kavach.callLang', callLang()); } catch (e) { /* storage blocked */ }
     });
     document.addEventListener('keydown', (e) => {
       const o = $('dangerOverlay');

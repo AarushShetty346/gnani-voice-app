@@ -3,7 +3,7 @@
   "demos": [
     {
       "id": "digital-arrest",
-      "title": "\"Digital arrest\" by fake cyber police",
+      "title": "Call from the \"Mumbai cyber crime branch\"",
       "title_native": "फ़र्ज़ी पुलिस का 'डिजिटल अरेस्ट'",
       "language": "hi-IN",
       "label": "scam",
@@ -21,7 +21,7 @@
     },
     {
       "id": "bank-kyc-otp",
-      "title": "Fake bank KYC call asking for OTP",
+      "title": "Your bank says KYC is pending",
       "title_native": "Fake bank KYC call asking for OTP",
       "language": "en-IN",
       "label": "scam",
@@ -38,7 +38,7 @@
     },
     {
       "id": "electricity-anydesk",
-      "title": "Power cut threat + remote-access app (Kannada)",
+      "title": "Electricity board: bill unpaid",
       "title_native": "ವಿದ್ಯುತ್ ಕಡಿತದ ಬೆದರಿಕೆ + ಎನಿಡೆಸ್ಕ್",
       "language": "kn-IN",
       "label": "scam",
@@ -55,7 +55,7 @@
     },
     {
       "id": "task-job-tamil",
-      "title": "Work-from-home \"like videos\" job scam (Tamil)",
+      "title": "Part-time job: earn by liking videos",
       "title_native": "வீட்டிலிருந்து வேலை மோசடி",
       "language": "ta-IN",
       "label": "scam",
@@ -71,7 +71,7 @@
     },
     {
       "id": "legit-bank-reminder",
-      "title": "Genuine bill reminder (should stay SAFE)",
+      "title": "Card bill reminder from your bank",
       "title_native": "असली बैंक रिमाइंडर कॉल",
       "language": "hi-IN",
       "label": "legit",

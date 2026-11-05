@@ -6,13 +6,13 @@
 <title>Scam Kavach</title>
 <meta name="description" content="Live scam-call shield. Put a suspicious call on speaker; Kavach listens in 10 Indian languages and warns you out loud.">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f2f4f8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%231f3fbf' d='M12 1.8 20.4 5v6.6c0 5.2-3.5 9.3-8.4 10.7-4.9-1.4-8.4-5.5-8.4-10.7V5z'/%3E%3Cpath stroke='%23fff' stroke-width='2' stroke-linecap='round' d='M9 10v3.5M12 8.5v6.5M15 10v3.5'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#f4f4f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0a0b" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23111113' d='M12 1.8 20.4 5v6.6c0 5.2-3.5 9.3-8.4 10.7-4.9-1.4-8.4-5.5-8.4-10.7V5z'/%3E%3Cpath stroke='%23fff' stroke-width='2' stroke-linecap='round' d='M9 10v3.5M12 8.5v6.5M15 10v3.5'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Latin:wght@500..800&family=Anek+Devanagari:wght@500..800&family=Noto+Sans:wght@400..700&family=Noto+Sans+Devanagari:wght@400..700&family=Noto+Sans+Bengali:wght@400..700&family=Noto+Sans+Gujarati:wght@400..700&family=Noto+Sans+Gurmukhi:wght@400..700&family=Noto+Sans+Kannada:wght@400..700&family=Noto+Sans+Malayalam:wght@400..700&family=Noto+Sans+Tamil:wght@400..700&family=Noto+Sans+Telugu:wght@400..700&display=swap">
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=3">
 </head>
 <body>
 <!-- Icon sprite (simple stroke glyphs, inline because the app ships with no JS/icon libraries) -->
@@ -43,7 +43,7 @@
       <svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>
       <div class="brand-text">
         <h1>Scam Kavach</h1>
-        <span class="brand-sub" lang="hi">स्कैम कवच</span>
+        <span class="brand-sub">Live scam-call shield</span>
       </div>
     </div>
     <p class="status" id="status" role="status" aria-live="polite">
@@ -55,8 +55,12 @@
     <section class="control" aria-label="Choose how to check a call">
       <div class="hero" id="hero">
         <div class="hero-inner">
-          <p class="tagline">Suspicious call? Put it on speaker. <strong>Kavach listens and warns you.</strong></p>
-          <p class="tagline-hi" lang="hi">शक वाली कॉल? स्पीकर पर डालिए। कवच सुनेगा और आपको समय रहते सावधान करेगा।</p>
+          <p class="tagline"><span>Suspicious call? Put it on speaker.</span> <strong>Kavach listens and warns you out loud.</strong></p>
+          <ul class="proof" aria-label="What Kavach does">
+            <li><b>10</b> Indian languages</li>
+            <li><b>Spoken</b> warning in yours</li>
+            <li><b>WhatsApp</b> summary after</li>
+          </ul>
         </div>
       </div>
 
@@ -73,22 +77,30 @@
       </div>
 
       <div class="warn-row">
-        <label for="warnLang">Warn me in <span class="hi" lang="hi">चेतावनी की भाषा</span></label>
+        <label for="warnLang">Warn me in</label>
         <div class="select-wrap">
           <select id="warnLang">
-            <option value="auto">Auto (call language)</option>
+            <option value="en-IN">English</option>
           </select>
         </div>
       </div>
 
       <!-- Live call -->
       <div class="panel" id="panel-live" role="tabpanel" aria-labelledby="tab-live">
+        <div class="warn-row call-lang">
+          <label for="callLang">Call language</label>
+          <div class="select-wrap">
+            <select id="callLang" aria-describedby="callLangHint">
+              <option value="indic-auto">Auto-detect</option>
+            </select>
+          </div>
+          <p class="field-hint" id="callLangHint">Pick the caller's language for best accuracy</p>
+        </div>
         <button class="listen" id="listenBtn" type="button">
           <span class="listen-rings" aria-hidden="true"><i></i><i></i><i></i></span>
           <span class="listen-core">
             <svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg>
             <span class="listen-label">Start listening</span>
-            <span class="listen-label-hi" lang="hi">सुनना शुरू करें</span>
           </span>
         </button>
         <p class="hint" id="liveHint">Put the call on speaker and keep this phone close to it.</p>
@@ -96,7 +108,7 @@
 
       <!-- Demo calls -->
       <div class="panel" id="panel-demo" role="tabpanel" aria-labelledby="tab-demo" hidden>
-        <p class="panel-intro">Scripted sample calls in Indian languages. All names and numbers are made up.</p>
+        <p class="panel-intro">Real phone-quality audio of scripted calls. Some are scams, one is not. Can you tell before Kavach does? Names and numbers are made up.</p>
         <ul class="demo-list" id="demoList" aria-busy="true">
           <li class="demo-card skeleton" aria-hidden="true"></li>
           <li class="demo-card skeleton" aria-hidden="true"></li>
@@ -166,33 +178,31 @@
             <span class="score" id="score">0</span><span class="score-max">/100</span>
           </div>
           <p class="level" id="levelLabel" aria-live="polite">Not listening</p>
-          <p class="level-hi" id="levelLabelHi" lang="hi">अभी सुन नहीं रहा</p>
         </div>
         <p class="reason" id="reason" hidden></p>
         <ul class="chips" id="chips" aria-label="Warning signs found"></ul>
       </div>
 
       <div class="transcript-head">
-        <h2>Transcript <span class="hi" lang="hi">बातचीत</span></h2>
+        <h2>Transcript</h2>
         <span class="legend"><mark class="flag legend-mark">risky phrase</mark></span>
       </div>
       <ol class="transcript" id="transcript" aria-live="polite" aria-relevant="additions text" aria-label="Live transcript">
         <li class="empty" id="emptyState">
           <svg class="ic" aria-hidden="true"><use href="#i-shield-alert"/></svg>
           <p>Start listening, play a demo call or check a recording. Risky phrases get highlighted here.</p>
-          <p class="hi" lang="hi">खतरे वाले शब्द यहाँ लाल रंग में दिखेंगे।</p>
         </li>
       </ol>
 
       <section class="summary" id="summary" hidden aria-labelledby="summaryHeading" tabindex="-1">
         <div class="summary-top">
-          <h2 id="summaryHeading">After the call <span class="hi" lang="hi">कॉल के बाद</span></h2>
+          <h2 id="summaryHeading">After the call</h2>
           <span class="verdict" id="verdict"></span>
         </div>
         <p class="summary-score" id="summaryScore"></p>
         <ul class="chips" id="summaryChips" aria-label="Warning signs"></ul>
         <p class="summary-text" id="summaryText"></p>
-        <h3 class="advice-head">What to do <span class="hi" lang="hi">अब क्या करें</span></h3>
+        <h3 class="advice-head">What to do</h3>
         <ol class="advice" id="advice"></ol>
         <div class="share">
           <a class="btn btn-whatsapp" id="shareWa" href="#" target="_blank" rel="noopener noreferrer">
@@ -208,7 +218,7 @@
 
   <footer class="foot">
     <p>Speech by Gnani Prisma v3.0, warnings voiced by Timbre v3.0. Demo calls are synthetic.</p>
-    <p lang="hi">बैंक, पुलिस या सरकार कभी फ़ोन पर OTP, PIN या पैसे नहीं माँगते।</p>
+    <p>Banks, police and government offices never ask for an OTP, PIN or money over the phone.</p>
   </footer>
 </div>
 
@@ -216,8 +226,9 @@
 <div class="banner" id="cautionBanner" role="alert" aria-live="assertive" hidden>
   <svg class="ic banner-ic" aria-hidden="true"><use href="#i-alert"/></svg>
   <div class="banner-body">
-    <p class="banner-title"><span>Be careful</span> <span lang="hi">सावधान</span> <span class="banner-cat" id="bannerCat"></span></p>
+    <p class="banner-title"><span>Be careful</span> <span class="banner-cat" id="bannerCat"></span></p>
     <p class="banner-text" id="bannerText"></p>
+    <p class="banner-en" id="bannerEn" hidden></p>
   </div>
   <button class="icon-btn" id="bannerClose" type="button" aria-label="Dismiss warning">
     <svg class="ic" aria-hidden="true"><use href="#i-close"/></svg>
@@ -231,10 +242,11 @@
       <span class="alarm-pulse"></span>
       <svg class="ic"><use href="#i-shield-alert"/></svg>
     </div>
-    <h2 class="alarm-title" id="alarmTitle"><span>Scam alert</span> <span lang="hi">धोखे का ख़तरा</span></h2>
+    <h2 class="alarm-title" id="alarmTitle">Scam alert</h2>
     <p class="alarm-cat" id="alarmCat"></p>
     <p class="alarm-text" id="alarmText"></p>
-    <p class="alarm-hint">Do not share OTP, PIN, card details or money. Hang up and call the official number yourself.</p>
+    <p class="alarm-en" id="alarmEn" hidden></p>
+    <p class="alarm-hint">Do not share an OTP, PIN, card details or money. Hang up and call the official number yourself.</p>
     <div class="alarm-actions">
       <button class="btn btn-alarm" id="alarmOk" type="button">
         <svg class="ic" aria-hidden="true"><use href="#i-phone-off"/></svg><span>Got it, I'll hang up</span>
@@ -248,6 +260,6 @@
 
 <div class="sr-only" id="srAlert" aria-live="assertive" aria-atomic="true"></div>
 
-<script src="/static/app.js" defer></script>
+<script src="/static/app.js?v=3" defer></script>
 </body>
 </html>

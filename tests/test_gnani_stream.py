@@ -80,10 +80,13 @@ async def test_headers_frames_commit_and_events(fake_server):
     assert state["texts"] == [{"type": "commit"}]
     assert events == [
         {"type": "connected"},
+        {"type": "speech_start"},
         {"type": "processing"},
         {"type": "transcript", "text": "OTP batao", "language": "hi-IN", "index": 1},
+        {"type": "empty"},                                       # VAD fired on noise: utterance done, no words
         {"type": "error", "message": "utterance failed", "fatal": False},
     ]
+    assert gs.GnaniStream.reports_speech and not gs.MockStream.reports_speech
 
 
 async def test_no_vad_headers_without_telephony():
@@ -139,6 +142,43 @@ async def test_handshake_401_raises_gnani_error(fake_server):
         async with gs.GnaniStream(gs.StreamConfig()):
             pass
     assert (ei.value.status, ei.value.code) == (401, "INVALID_API_KEY")
+
+
+async def test_handshake_429_is_retried(fake_server, monkeypatch):
+    """A rate-limited handshake is retried with backoff; a 401 is not."""
+    monkeypatch.setattr(gs, "BACKOFF", (0.01, 0.01, 0.01))
+    tries = []
+
+    def busy_twice(connection, request):
+        tries.append(1)
+        if len(tries) <= 2:
+            body = json.dumps({"detail": {"error_code": "RATE_LIMITED",
+                                          "message": "Only 1 active request is allowed at a time"}})
+            return connection.respond(HTTPStatus.TOO_MANY_REQUESTS, body)
+        return None
+    await fake_server(gnani_like, process_request=busy_twice)
+    async with gs.GnaniStream(gs.StreamConfig()) as stream:
+        assert await stream.events().__anext__() == {"type": "connected"}
+    assert len(tries) == 3
+
+    tries.clear()
+
+    def always_busy(connection, request):
+        tries.append(1)
+        return connection.respond(HTTPStatus.TOO_MANY_REQUESTS, json.dumps({"detail": {"error_code": "RATE_LIMITED",
+                                                                                        "message": "busy"}}))
+    await fake_server(gnani_like, process_request=always_busy)
+    with pytest.raises(GnaniError) as ei:
+        await gs.GnaniStream(gs.StreamConfig()).open()
+    assert ei.value.code == "RATE_LIMITED" and len(tries) == 4      # 1 try + 3 retries
+
+
+def test_open_and_close_timeouts_fit_the_browser():
+    """The browser's connect timeout must outlast a whole open() (timeout + 429 backoff)."""
+    import re
+    js = (gs.config.ROOT / "static" / "app.js").read_text(encoding="utf-8")
+    connect_ms = int(re.search(r"CONNECT_TIMEOUT_MS = (\d+)", js).group(1))
+    assert connect_ms / 1000 > gs.OPEN_TIMEOUT_S + sum(gs.BACKOFF) + 2
 
 
 async def test_open_stream_mock_without_key(monkeypatch):

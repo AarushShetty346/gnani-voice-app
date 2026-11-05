@@ -125,17 +125,17 @@ def parse_json(text: str) -> dict | None:
     return None
 
 
-async def chat_json(messages: list[dict]) -> dict | None:
+async def chat_json(messages: list[dict], timeout: float = 20) -> dict | None:
     """Chat expecting a JSON object. Tries response_format=json_object first; if the endpoint rejects
-    it, retries without. None on any failure (never raises)."""
+    it, retries without. None on any failure (never raises). `timeout` is per model attempt."""
     try:
-        content = await chat(messages, temperature=0.2, json_mode=True)
+        content = await chat(messages, temperature=0.2, json_mode=True, timeout=timeout)
     except LLMError as e:
         if e.status not in (400, 404, 415, 422):
             log.warning("LLM call failed: %s", e)
             return None
         try:                                   # endpoint doesn't support json_object: plain call
-            content = await chat(messages, temperature=0.2)
+            content = await chat(messages, temperature=0.2, timeout=timeout)
         except LLMError as e2:
             log.warning("LLM call failed: %s", e2)
             return None
