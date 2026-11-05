@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app import audio, config, gnani  # noqa: E402  (app.config loads .env)
 from app.gnani_stream import FRAME_BYTES, GnaniStream, StreamConfig  # noqa: E402
 
-TEXT = "नमस्ते! मैं बैंक से नहीं, Scam Kavach से बोल रही हूँ। अपना OTP किसी को मत बताइए।"
+TEXT = "नमस्ते! मैं बैंक से नहीं, ScamLingo से बोल रही हूँ। अपना OTP किसी को मत बताइए।"
 FRAME_S = FRAME_BYTES / 2 / 16000          # 32 ms of 16 kHz s16le mono
 
 

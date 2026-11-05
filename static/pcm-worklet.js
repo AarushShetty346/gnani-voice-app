@@ -1,4 +1,4 @@
-/* Scam Kavach: AudioWorklet that turns whatever the AudioContext runs at (usually 48000 or 44100 Hz)
+/* ScamLingo: AudioWorklet that turns whatever the AudioContext runs at (usually 48000 or 44100 Hz)
  * into 16 kHz mono signed 16-bit little-endian PCM, and posts it to the main thread as ArrayBuffers of
  * exactly 512 samples (1024 bytes). That is the frame size Gnani's realtime STT expects (32 ms each).
  *

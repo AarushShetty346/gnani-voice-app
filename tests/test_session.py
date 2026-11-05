@@ -556,4 +556,4 @@ async def test_slow_summary_falls_back_to_template(monkeypatch):
     await h.say("Tell me the OTP you just received.")
     await h.stop()
     s = h.sent[-1]
-    assert s["type"] == "summary" and s["verdict"] == "scam" and "Checked with Scam Kavach" in s["share_text"]
+    assert s["type"] == "summary" and s["verdict"] == "scam" and "Checked with ScamLingo" in s["share_text"]

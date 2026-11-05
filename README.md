@@ -1,10 +1,10 @@
-# Scam Kavach 🛡️
+# ScamLingo 🛡️
 
-**A live scam-call shield for Indian phone users.** If a call feels off, put it on speaker. Kavach (कवच, "shield")
-listens, spots scam patterns as they happen, and **warns you out loud in your own language** before you share an OTP
+**A live scam-call shield for Indian phone users.** If a call feels off, put it on speaker. ScamLingo
+listens for the lingo scammers use ("digital arrest", "share the OTP", "don't tell anyone") as the call happens, and **warns you out loud in your own language** before you share an OTP
 or send money. When the call ends you get a plain-language summary you can forward to family on WhatsApp.
 
-> संदिग्ध कॉल? स्पीकर पर डालिए। कवच सुनेगा और आपको समय रहते सावधान करेगा।
+> संदिग्ध कॉल? स्पीकर पर डालिए। ScamLingo सुनेगा और आपको समय रहते सावधान करेगा।
 
 It handles "digital arrest" threats from fake police, fake bank KYC and OTP calls, power-cut threats that push
 AnyDesk, and work-from-home job scams. Calls can be in any of 10 Indian languages, in code-mixed Hinglish, and
@@ -33,7 +33,7 @@ over noisy phone audio.
   Safety advice ("the bank never asks for your OTP") is recognised as advice, so genuine calls stay safe.
 - **LLM second opinion (optional).** Any OpenAI-compatible model rereads the last ~12 utterances. It can raise the
   risk but can't push a call to "scam" on its own without a rule hit.
-- **Interrupts, not just flags.** When the risk rises, Kavach speaks a short warning ("Stop! Never share your
+- **Interrupts, not just flags.** When the risk rises, ScamLingo speaks a short warning ("Stop! Never share your
   OTP… Hang up now.") in the listener's language. Alerts are limited to one per category and spaced at least 6 s
   apart. The warning appears on screen the moment it fires; its Timbre voice follows a second or two later (or
   instantly when pre-generated with `scripts/prewarm_alerts.py`), and the browser's own voice steps in if the clip
@@ -61,7 +61,7 @@ over noisy phone audio.
   WhatsApp" and "Copy" buttons.
 - "Warn me in": English by default, "Same as the call", or any of the 10 languages. When the warning is in
   another language, the alert also shows the English wording underneath.
-- Demo cards don't say which calls are scams. Kavach's verdict appears on the card after the call plays.
+- Demo cards don't say which calls are scams. ScamLingo's verdict appears on the card after the call plays.
 
 **Languages:** Hindi, English, Bengali, Gujarati, Kannada, Malayalam, Marathi, Punjabi, Tamil, Telugu, plus
 code-mixed Hinglish.
@@ -123,7 +123,7 @@ language. Each `alert` carries an `id` and `audio_b64: null` unless the clip was
 ## Synthetic data only
 
 Every demo call is scripted and voiced by Timbre v3.0. All names, numbers and organisations in them are made up.
-No real call recordings were used to build or test Kavach. The share text never includes phone or account
+No real call recordings were used to build or test ScamLingo. The share text never includes phone or account
 numbers.
 
 ---
