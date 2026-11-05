@@ -547,9 +547,14 @@ mark.flag:hover::after, mark.flag:focus-visible::after { display: block; }
   .alarm-icon .ic { width: 40px; height: 40px; }
   .alarm-text { font-size: clamp(20px, 6vw, 30px); line-height: 1.3; }
   .alarm-hint { font-size: 14px; }
-  .alarm-actions {
-    position: sticky; bottom: calc(-1 * max(28px, env(safe-area-inset-bottom))); margin-top: 4px;
-    padding: 12px 0 max(16px, env(safe-area-inset-bottom));
+  .alarm-actions { margin-top: 4px; }
+  /* Only when the alert is taller than the screen (app.js sets .overflowing): keep the buttons in reach. */
+  .alarm.overflowing .alarm-actions {
+    position: sticky; bottom: calc(-1 * max(28px, env(safe-area-inset-bottom)));
+    width: auto; align-self: stretch;          /* full-bleed bottom sheet, not a box */
+    margin-left: calc(-1 * max(20px, env(safe-area-inset-left)));
+    margin-right: calc(-1 * max(20px, env(safe-area-inset-right)));
+    padding: 12px max(20px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
     background: linear-gradient(to bottom, rgb(110 8 22 / 0), #6e0816 30%);
   }
 }
