@@ -19,26 +19,26 @@ Rebuild it with `.venv\Scripts\python video\launch.py` (needs the captures in `v
 ## LinkedIn post
 
 ```text
-A fake "cyber crime inspector" calls. Before he says "digital arrest" or asks for a rupee, my app cuts in out loud: "Stop! This looks like a scam call."
+A fake "cyber crime inspector" calls. Before he says "digital arrest" or asks for a single rupee, my app cuts in out loud: "Stop! This looks like a scam call."
 
 I built ScamLingo for the Great Indian AI Internship Challenge by @Gnani.ai.
 
 How it works:
-→ Put a suspicious call on speaker next to ScamLingo, a web app in the browser.
-→ Gnani Prisma v3.0 (real-time speech-to-text) transcribes it live, Hinglish and code-mixed speech included.
-→ Every sentence is checked for 8 scam signals (OTP or PIN asks, fake police or bank staff, "digital arrest", account threats, payment asks, remote-access apps like AnyDesk, pressure and secrecy, job or prize bait), plus an optional LLM second opinion.
-→ At high risk the screen goes red and Gnani Timbre v3.0 speaks the warning, in English or in the caller's language. It works in 10 Indian languages.
-→ After the call you get a plain-language summary (LLM-written when the LLM is on) to forward to family on WhatsApp, with the 1930 helpline.
+→ Put a suspicious call on speaker next to ScamLingo, a web app that runs in your browser.
+→ Gnani Prisma v3.0 (speech-to-text) writes the call down live, including Hinglish and other code-mixed speech.
+→ ScamLingo checks every line for the lingo scammers use: OTP or PIN asks, fake police or bank staff, "digital arrest", account threats, payment asks, remote-access apps like AnyDesk, pressure and secrecy, job or prize bait. An optional LLM gives a second opinion.
+→ When the risk is high, the screen turns red and Gnani Timbre v3.0 speaks the warning out loud, in English or in the caller's language. It works in 10 Indian languages.
+→ After the call you get a plain-language summary to forward to family on WhatsApp, with the 1930 helpline.
 
-What I measured on live Gnani: 5 demo calls, 5/5 judged right. In the Kannada call the screen went red about 1 second after the threat. A bank reminder that says "the bank never asks for an OTP or PIN" stayed Safe the whole call.
+What I measured on live Gnani: 5 demo calls, 5/5 judged right. A bank reminder that says "the bank never asks for an OTP or PIN" stayed Safe the whole call.
 
-Honest limits: it uses Gnani's cloud APIs, not on-device. It isn't part of your dialer and doesn't block calls; you put the call on speaker. It won't catch every scam, and 5 calls is a small test. The calls in the video are synthetic: AI voices, made-up names.
+Honest limits: it uses Gnani's cloud APIs, not on-device. It isn't part of your phone's dialer and doesn't block calls; you put the call on speaker. It won't catch every scam, and 5 calls is a small test. The calls in the video are synthetic: AI voices, made-up names.
 
-Why I built it: Indians reported losing about ₹22,800 crore to cyber fraud in 2024 (I4C data, shared by MHA via PIB). Lost money? Call 1930 or report at cybercrime.gov.in.
+Why I built it: Indians reported losing about ₹22,800 crore to cyber fraud in 2024 (I4C data, via PIB). Lost money? Call 1930 or report at cybercrime.gov.in.
 
 Has your family got a call like this? Tell me in the comments, and send this to whoever at home picks up every call.
 
-#VoiceAI #BuildInPublic #GnaniAI #GreatIndianAIInternshipChallenge
+#GnaniAI #GreatIndianAIInternshipChallenge
 ```
 
 ## X post
@@ -46,7 +46,7 @@ Has your family got a call like this? Tell me in the comments, and send this to 
 ```text
 A fake "police officer" calls. Before he asks for a rupee, my app says out loud: "Stop! This looks like a scam call."
 
-ScamLingo: built on @GnaniAi Prisma v3.0 + Timbre v3.0. Warns in the caller's language too. Demo calls: synthetic.
+ScamLingo: built on @GnaniAi Prisma v3.0 + Timbre v3.0. Works in 10 Indian languages. Demo calls: synthetic.
 
 #GnaniAI #GreatIndianAIInternshipChallenge
 ```
