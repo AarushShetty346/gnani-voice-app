@@ -129,6 +129,27 @@ def build(spec: dict, out_dir: Path, overlay_concat: Path | None, sfx: dict, fin
     filters.append(f"{''.join(concat_pads)}concat=n={len(spec['base'])}:v=1:a=1[bv][ba]")
 
     vout = "[bv]"
+    # Frosted glass: blur the footage behind each caption box (rounded, fading with the caption).
+    for j, f in enumerate(spec.get("frost", [])):
+        x, y, w, h = (int(f[k]) for k in ("x", "y", "w", "h"))
+        x, y, w, h = x - x % 2, y - y % 2, w - w % 2, h - h % 2
+        mask = out_dir / f"frost_mask_{j}.png"
+        r = f.get("r", 32)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=white:s={w}x{h}:d=1",
+                        "-frames:v", "1", "-vf",
+                        f"format=gray,geq=lum='255*lte(pow(max(max({r}-X,X-({w - 1 - r})),0),2)"
+                        f"+pow(max(max({r}-Y,Y-({h - 1 - r})),0),2),{r * r})'", str(mask)], check=True)
+        mi = add_input(["-loop", "1", "-framerate", str(FPS), "-t", f"{total:.4f}", "-i", str(mask)])
+        t0, t1 = f["t0"], f["t1"]
+        fi, fo = f.get("fade_in", 0.35), f.get("fade_out", 0.25)
+        filters.append(f"{vout}split=2[fm{j}][fc{j}]")
+        filters.append(f"[fc{j}]crop={w}:{h}:{x}:{y},boxblur=luma_radius=18:luma_power=2:chroma_radius=10,"
+                       f"eq=brightness=-0.06,format=yuva420p[fb{j}]")
+        filters.append(f"[{mi}:v]format=gray,setpts=PTS-STARTPTS[fk{j}]")
+        filters.append(f"[fb{j}][fk{j}]alphamerge,fade=t=in:st={t0:.4f}:d={fi}:alpha=1,"
+                       f"fade=t=out:st={max(t0, t1 - fo):.4f}:d={fo}:alpha=1[fp{j}]")
+        filters.append(f"[fm{j}][fp{j}]overlay={x}:{y}:enable='between(t,{t0:.4f},{t1:.4f})'[fv{j}]")
+        vout = f"[fv{j}]"
     if overlay_concat:
         # Pre-encode the PNG sequence to one alpha video: feeding the concat demuxer straight into the big
         # graph stalls ffmpeg's scheduler (it waits forever at the first cut).
@@ -137,7 +158,7 @@ def build(spec: dict, out_dir: Path, overlay_concat: Path | None, sfx: dict, fin
                         "-vf", f"fps={FPS},format=argb", "-c:v", "qtrle", str(ov_mov)], check=True)
         i = add_input(["-i", str(ov_mov)])
         filters.append(f"[{i}:v]fps={FPS},format=rgba[ov]")
-        filters.append(f"[bv][ov]overlay=0:0:eof_action=pass:format=auto,format=yuv420p[vout]")
+        filters.append(f"{vout}[ov]overlay=0:0:eof_action=pass:format=auto,format=yuv420p[vout]")
         vout = "[vout]"
 
     mix = ["[ba]"]

@@ -59,7 +59,12 @@ EXTRA_CSS = """
 .t .red { color: #ff5a6e; }
 .t .grn { color: var(--green); }
 .t .amb { color: var(--amber); }
-.cap.bottom { bottom: 44px; }
+/* captions overlap the bottom of the app footage, so it shows through them */
+.cap.bottom { top: auto; bottom: 160px; }
+.cap .box { background: rgb(10 10 11 / .22); border-color: rgb(255 255 255 / .22); }
+/* soft top/bottom edges on the app footage instead of a hard cut through its text */
+.fadeT { left: 0; right: 0; height: 30px; background: linear-gradient(to bottom, #0a0a0b, rgb(10 10 11 / 0)); }
+.fadeB { left: 0; right: 0; height: 26px; background: linear-gradient(to top, #0a0a0b, rgb(10 10 11 / 0)); }
 .disc { left: 0; right: 0; display: flex; justify-content: center; }
 .disc span { font: 650 13px/1 var(--body); color: rgb(255 255 255 / .8); background: rgb(255 255 255 / .06);
   padding: 6px 12px 7px; border-radius: 999px; letter-spacing: .01em; }
@@ -118,9 +123,11 @@ def head(t0, t1, text, kicker="", i=("rise", .45), o=("fade", .25)):
     el(t0, t1, f'{k}<div class="t">{text}</div>', cls="topband", z=20, i=i, o=o)
 
 
-def caption(t0, t1, who, text, who_cls="caller", i=("rise", .35), o=("fade", .25)):
+def caption(t0, t1, who, text, who_cls="caller", i=("fade", .35), o=("fade", .25)):
+    """Caption on frosted glass: edit.py blurs the footage behind the box (it fades, so the blur can match)."""
     el(t0, t1, f'<div class="box"><span class="who {who_cls}">{who}</span>{text}</div>', cls="cap bottom", z=18,
        i=i, o=o)
+    els[-1]["frost"] = True
 
 
 def disc(t0, t1):
@@ -171,6 +178,17 @@ def prep_narration():
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(NARR / f"{src}.wav"), "-af",
                         f"aselect='{keep}',asetpts=N/SR/TB,afade=t=out:st={end}:d=0.03", str(NARR / f"{dst}.wav")],
                        check=True)
+
+
+def edge_fades():
+    """Fade the top and bottom edges of every app-footage segment laid so far."""
+    t = 0.0
+    for s in base:
+        d = edit.seg_dur(s)
+        if s["type"] == "clip":
+            for cls, top in (("fadeT", AY), ("fadeB", AY + 675 - 26)):
+                el(t, t + d, "", cls=cls, style=f"top:{top}px", z=11, i=("none", 0), o=("none", 0))
+        t += d
 
 
 def timeline():
@@ -229,7 +247,6 @@ def timeline():
     head(s4 + 0.2, s4 + 4.3, 'A <span class="red">"police inspector"</span> calls', "Real app · live on Gnani")
     head(s4 + 4.3, T[0], 'Gnani Prisma <span class="dim">writes it down, live</span>', "<b>Step 1</b> · hears")
     caption(s4 + 0.1, s4 + 3.84, "Caller · Hindi", "I'm Inspector Rajesh Sharma from the Mumbai Cyber Crime Branch.")
-    caption(s4 + 4.64, T[0], "You · Hindi", "Yes, go on?", "you")
     ring(s4 + 4.45, T[0], *TRANSCRIPT_BOX)
 
     # ---- S5 he builds a fake case
@@ -269,7 +286,6 @@ def timeline():
     head(s9 + 0.15, T[0], 'A normal bank call <span class="dim">in Hindi</span>', "The other side")
     caption(c9 + 16.6, c9 + 20.8, "Bank caller · Hindi",
             "Remember, the bank never asks for an OTP or PIN over the phone.")
-    caption(c9 + 21.3, T[0], "Bank caller · Hindi", "Have a good day.")
     s10 = seg({"type": "clip", "cap": "legit", "t0": 39.8, "t1": 42.0, "freeze": 0.4, "audio": False})
     snd(s10 + 0.3, "sfx:chime", 0.45)
     head(s10, T[0], 'Says <span class="grn">"OTP"</span> and <span class="grn">"PIN"</span>. '
@@ -280,6 +296,7 @@ def timeline():
     ring(s10 + 0.9, T[0], *SAFE_BOX, "green round")
 
     disc(s1, s2)
+    edge_fades()
     disc(s4, T[0])
 
     # ---- S11 languages + what it's built on
@@ -325,8 +342,9 @@ def main():
     sounds = sfx.make(HERE / "out" / "sfx")
     sounds.update(make_extra_sfx(HERE / "out" / "sfx"))
     css = (HERE / "style.css").read_text("utf-8") + EXTRA_CSS
-    concat = asyncio.run(overlay.render(OUT / "overlay", els, css, total))
-    spec = {"captures": {k: str(v) for k, v in CAPS.items()}, "base": base, "audio": audio}
+    frosts: list[dict] = []
+    concat = asyncio.run(overlay.render(OUT / "overlay", els, css, total, frosts=frosts))
+    spec = {"captures": {k: str(v) for k, v in CAPS.items()}, "base": base, "audio": audio, "frost": frosts}
     edit.build(spec, OUT, concat, sounds, FINAL)
     print(f"wrote {FINAL}")
 

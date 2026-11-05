@@ -39,8 +39,10 @@ def write_page(out: Path, elements: list[dict], css: str) -> Path:
 
 
 async def render(out: Path, elements: list[dict], css: str, duration: float, port: int = 9351,
-                 stills: tuple = ()) -> Path:
-    """stills: times (s) to also save as preview PNGs."""
+                 stills: tuple = (), frosts: list | None = None) -> Path:
+    """stills: times (s) to also save as preview PNGs. frosts: filled with the output-px boxes of elements
+    marked "frost" (see edit.py)."""
+    frosts = frosts if frosts is not None else []
     page_path = write_page(out, elements, css)
     frames_dir = out / "frames"
     frames_dir.mkdir(exist_ok=True)
@@ -69,6 +71,15 @@ async def render(out: Path, elements: list[dict], css: str, duration: float, por
             entries.append([name, 1])
             last_key, last_file = key, name
             uniq += 1
+        # Where each "frost" element's box sits (mid-life, after its entrance), for the blur behind it.
+        for idx, d in enumerate(elements):
+            if not d.get("frost"):
+                continue
+            await p.eval(f"seek({(d['start'] + d['end']) / 2:.5f})")
+            r = await p.eval(f"(() => {{ const b = document.querySelectorAll('#stage > .el')[{idx}]"
+                             f".querySelector('.box').getBoundingClientRect();"
+                             f" return {{x: b.left, y: b.top, w: b.width, h: b.height}}; }})()")
+            frosts.append({"t0": d["start"], "t1": d["end"], **{k: round(v * SCALE) for k, v in r.items()}})
         for s in stills:
             await p.eval(f"seek({s:.5f})")
             r = await p.send("Page.captureScreenshot", format="png")
