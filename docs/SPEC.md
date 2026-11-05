@@ -200,7 +200,7 @@ Reject files > 10 min (credits). Mock mode: use the `digital-arrest` demo lines 
 - server → `{"type":"ready","mock":bool}`
 - server → `{"type":"transcript","index":int,"text":str,"language":str|null,"flags":[{"category","phrase","start","end"}]}`
 - server → `{"type":"risk","score":int,"level":"safe"|"caution"|"danger","categories":[str],"reason":str,"source":"rules"|"llm"}`
-- server → `{"type":"alert","level":"caution"|"danger","category":str,"text":str,"language":str,"audio_b64":str|null}` (WAV)
+- server → `{"type":"alert","level":"caution"|"danger","category":str,"text":str,"text_en":str|null,"language":str,"audio_b64":str|null}` (WAV; `text_en` is the English wording for the screen, null when the alert is already English)
 - server → `{"type":"summary", ...summarize() fields}` then the server closes the socket
 - server → `{"type":"error","message":str,"fatal":bool}`
 

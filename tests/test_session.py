@@ -179,6 +179,7 @@ async def test_transcripts_risk_alert_dedupe_and_gap():
     assert [a["category"] for a in alerts] == ["otp_request", "payment_request", "remote_access"]
     assert [a["id"] for a in alerts] == [1, 2, 3]
     assert all(a["level"] == "danger" and a["language"] == "en-IN" and a["text"] for a in alerts)
+    assert all(a["text_en"] is None for a in alerts)   # already English: no second line
     assert all(a["audio_b64"] is None and a["audio_pending"] is False for a in alerts)   # mock mode: no TTS
     assert not h.of("alert_audio")
     t = h.of("transcript")[1]
@@ -290,6 +291,7 @@ async def test_mic_echo_of_our_own_alert_is_dropped():
     await h.until(lambda: h.of("alert"))
     spoken = h.of("alert")[0]["text"]
     assert spoken == alerts.alert_text(h.of("alert")[0]["category"], h.of("alert")[0]["level"], "hi-IN")
+    assert h.of("alert")[0]["text_en"] == alerts.alert_text(h.of("alert")[0]["category"], h.of("alert")[0]["level"], "en-IN")
     n = len(h.of("transcript"))
     words = spoken.split()
     h.stream.say(" ".join(words[len(words) // 3:]), "hi-IN")           # the tail of our warning, via the mic

@@ -94,9 +94,9 @@
 
   const validLang = (code) => (typeof code === 'string' && /^[a-z]{2,3}(-[A-Za-z]{2})?$/.test(code) ? code : null);
   const langs = () => (S.status && S.status.languages && typeof S.status.languages === 'object' ? S.status.languages : FALLBACK_LANGS);
-  const langNative = (code) => {
+  const langName = (code) => {
     const L = code && langs()[code];
-    return L ? (L.native || L.name || code) : (code || '');
+    return L ? (L.name || L.native || code) : (code || '');
   };
   const catLabel = (key) => {
     const c = CATS[key];
@@ -115,6 +115,7 @@
   const S = {
     status: null,
     demos: [],
+    demoResults: {},   // demo id -> verdict, shown on the card after that demo has played
     tab: 'live',
     session: null,       // current live/demo session (see startSession)
     seq: 0,
@@ -157,7 +158,7 @@
     fillLanguages();
   }
 
-  function fillLanguageSelect(sel, autoValue, autoLabel, storageKey) {
+  function fillLanguageSelect(sel, autoValue, autoLabel, storageKey, defaultValue) {
     let saved = null;
     try { saved = localStorage.getItem(storageKey); } catch (e) { /* storage blocked */ }
     sel.replaceChildren(el('option', { value: autoValue }, autoLabel));
@@ -166,11 +167,14 @@
       const native = L && L.native ? L.native : name;
       sel.append(el('option', { value: code }, native === name ? name : native + ' (' + name + ')'));
     }
-    if (saved && [...sel.options].some((o) => o.value === saved)) sel.value = saved;
+    const has = (v) => v && [...sel.options].some((o) => o.value === v);
+    if (has(saved)) sel.value = saved;
+    else if (has(defaultValue)) sel.value = defaultValue;
   }
 
   function fillLanguages() {
-    fillLanguageSelect($('warnLang'), 'auto', 'Auto (call language)', 'kavach.warn');
+    // English by default; "Same as the call" (warn in the caller's language) is one tap away.
+    fillLanguageSelect($('warnLang'), 'auto', 'Same as the call', 'kavach.warn2', 'en-IN');
     fillLanguageSelect($('callLang'), 'indic-auto', 'Auto-detect', 'kavach.callLang');
   }
 
@@ -247,9 +251,7 @@
     }
     const live = S.status && !S.status.gnani_mock;
     list.replaceChildren(...S.demos.map((d) => {
-      const isScam = d.label !== 'legit';
       const title = String(d.title || d.id || 'Demo call');
-      const native = d.title_native && d.title_native !== d.title ? String(d.title_native) : null;
       const audioTag = d.has_audio ? 'Phone audio' : 'Mock audio';
       const btn = el('button', {
         class: 'demo-play', type: 'button', 'aria-label': 'Play demo: ' + title, dataset: { id: String(d.id) },
@@ -259,18 +261,39 @@
           else startSession('demo', d);
         },
       }, icon('play'), el('span', { class: 'demo-play-label' }, 'Play'));
-      return el('li', { class: 'demo-card', dataset: { id: String(d.id), label: isScam ? 'scam' : 'legit' } },
+      // No scam/legit label up front: the verdict appears on the card only after Kavach has heard the call.
+      const card = el('li', { class: 'demo-card', dataset: { id: String(d.id) } },
         el('div', { class: 'demo-body' },
           el('div', { class: 'badges' },
-            el('span', { class: 'badge badge-' + (isScam ? 'scam' : 'legit') }, isScam ? 'SCAM' : 'LEGIT'),
-            el('span', { class: 'badge badge-lang', lang: validLang(d.language) }, langNative(d.language) || 'Auto'),
-            el('span', { class: 'badge badge-audio' }, audioTag)),
+            el('span', { class: 'badge badge-lang' }, langName(d.language) || 'Auto'),
+            el('span', { class: 'badge badge-audio' }, audioTag),
+            el('span', { class: 'badge badge-result', hidden: true })),
           el('h3', { class: 'demo-title' }, title),
-          native ? el('p', { class: 'demo-native', lang: validLang(d.language) }, native) : null,
           (!d.has_audio && live) ? el('p', { class: 'demo-note' }, 'No demo audio yet: run scripts/make_demo_audio.py, or the live STT will hear silence.') : null),
         btn);
+      paintDemoResult(card, S.demoResults[String(d.id)]);
+      return card;
     }));
     syncDemoButtons();
+  }
+
+  // After a demo call: show what Kavach decided, on that card.
+  function paintDemoResult(card, verdict) {
+    const v = VERDICTS[verdict];
+    const b = card.querySelector('.badge-result');
+    if (!v || !b) return;
+    card.dataset.result = v.level;
+    b.textContent = v.level === 'safe' ? 'Kavach: looks safe' : v.level === 'danger' ? 'Kavach: scam' : 'Kavach: suspicious';
+    b.className = 'badge badge-result badge-' + v.level;
+    b.hidden = false;
+  }
+
+  function revealDemoResult(s, m) {
+    if (!s || !s.demo || !m || !VERDICTS[m.verdict]) return;
+    const id = String(s.demo.id);
+    S.demoResults[id] = m.verdict;
+    const card = [...document.querySelectorAll('.demo-card[data-id]')].find((c) => c.dataset.id === id);
+    if (card) paintDemoResult(card, m.verdict);
   }
 
   function syncDemoButtons() {
@@ -338,7 +361,6 @@
     $('gaugeFill').style.strokeDashoffset = String(100 - score);
     $('needle').style.transform = 'rotate(' + (-90 + score * 1.8) + 'deg)';
     $('levelLabel').textContent = LEVELS[level].en;
-    $('levelLabelHi').textContent = LEVELS[level].hi;
     const rm = $('riskMeter');
     rm.setAttribute('aria-valuenow', String(score));
     rm.setAttribute('aria-valuetext', score + ' out of 100, ' + LEVELS[level].en);
@@ -390,9 +412,7 @@
       if (typeof c !== 'string' || seen.has(c)) continue;
       seen.add(c);
       const L = catLabel(c);
-      items.push(el('li', { class: 'chip', dataset: { cat: c } },
-        el('span', { class: 'chip-en' }, L.en),
-        L.hi ? el('span', { class: 'chip-hi', lang: 'hi' }, L.hi) : null));
+      items.push(el('li', { class: 'chip', dataset: { cat: c } }, el('span', { class: 'chip-en' }, L.en)));
     }
     ul.replaceChildren(...items);
   }
@@ -423,7 +443,7 @@
       if (r.a < pos) continue; // skip overlaps
       if (r.a > pos) p.append(document.createTextNode(chars.slice(pos, r.a).join('')));
       const lab = catLabel(r.cat);
-      const tip = lab.hi ? lab.en + ' / ' + lab.hi : lab.en;
+      const tip = lab.en;
       const mark = el('mark', { class: 'flag', tabindex: '0', title: tip, dataset: { tip, cat: r.cat } });
       mark.textContent = chars.slice(r.a, r.b).join('');
       p.append(mark);
@@ -482,7 +502,7 @@
     const meta = el('div', { class: 'bubble-meta' },
       el('span', { class: 'who' }, who),
       tSec != null ? el('span', { class: 'time' }, fmtTime(tSec)) : null,
-      lang ? el('span', { class: 'blang' }, langNative(lang)) : null,
+      lang ? el('span', { class: 'blang' }, langName(lang)) : null,
       nFlags ? el('span', { class: 'bflag' }, icon('alert'), nFlags === 1 ? '1 warning sign' : nFlags + ' warning signs') : null);
     const li = el('li', {
       class: 'bubble' + (speaker ? ' from-' + speaker : '') + (nFlags ? ' flagged' : ''),
@@ -512,7 +532,9 @@
     const text = stripTags(m.text);
     const lang = validLang(m.language);
     const L = catLabel(m.category);
-    const catText = L.hi ? L.en + ' / ' + L.hi : L.en;
+    const catText = L.en;
+    // English wording for viewers who don't read the call's language (null when the alert is already English).
+    const textEn = typeof m.text_en === 'string' && m.text_en.trim() && m.text_en.trim() !== text ? stripTags(m.text_en) : '';
 
     $('srAlert').textContent = (level === 'danger' ? 'Scam alert. ' : 'Be careful. ') + text;
 
@@ -522,6 +544,8 @@
       const t = $('alarmText');
       t.textContent = text;
       if (lang) t.setAttribute('lang', lang); else t.removeAttribute('lang');
+      $('alarmEn').textContent = textEn;
+      $('alarmEn').hidden = !textEn;
       openAlarm();
       vibrate([380, 140, 380, 140, 700]);
     } else {
@@ -529,6 +553,8 @@
       const bt = $('bannerText');
       bt.textContent = text;
       if (lang) bt.setAttribute('lang', lang); else bt.removeAttribute('lang');
+      $('bannerEn').textContent = textEn;
+      $('bannerEn').hidden = !textEn;
       openBanner();
       vibrate([220, 120, 220]);
     }
@@ -816,7 +842,7 @@
     const v = VERDICTS[m.verdict] || VERDICTS.suspicious;
     const box = $('summary');
     box.dataset.level = v.level;
-    $('verdict').replaceChildren(el('span', null, v.en), el('span', { class: 'hi', lang: 'hi' }, v.hi));
+    $('verdict').replaceChildren(el('span', null, v.en));
     let score = Math.round(Number(m.score));
     $('summaryScore').textContent = Number.isFinite(score) ? 'Risk score ' + clamp(score, 0, 100) + ' / 100' : '';
     renderChips($('summaryChips'), Array.isArray(m.categories) ? m.categories : []);
@@ -1066,6 +1092,7 @@
       case 'summary':
         s.gotSummary = true;
         renderSummary(m);
+        revealDemoResult(s, m);
         // The red overlay would hide the summary: close it once its voice is done.
         if (!V.current && !V.queue.length) closeAlarmForSummary(); else V.closeWhenIdle = true;
         if (s.state === 'live') { s.state = 'stopping'; stopCapture(s); renderSessionUI(); }
@@ -1385,7 +1412,7 @@
     $('alarmReplay').addEventListener('click', replayAlert);
     $('copyBtn').addEventListener('click', copyShare);
     $('warnLang').addEventListener('change', () => {
-      try { localStorage.setItem('kavach.warn', warnLang()); } catch (e) { /* storage blocked */ }
+      try { localStorage.setItem('kavach.warn2', warnLang()); } catch (e) { /* storage blocked */ }
     });
     $('callLang').addEventListener('change', () => {
       try { localStorage.setItem('kavach.callLang', callLang()); } catch (e) { /* storage blocked */ }

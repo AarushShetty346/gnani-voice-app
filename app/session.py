@@ -570,6 +570,7 @@ class ListenSession:
         The TTS call is shielded, so a call that ends meanwhile still fills the cache."""
         lang = resolve_warn_language(self.warn_language, self.monitor)
         text = alerts.alert_text(category, level, lang)
+        text_en = alerts.alert_text(category, level, "en-IN")   # on-screen translation, never spoken
         tts = asyncio.ensure_future(self._alert_audio(text, lang))
         tts.add_done_callback(_swallow)
         async with self._alert_order:
@@ -577,6 +578,7 @@ class ListenSession:
             inline = _audio_of(tts) if tts.done() else None
             self._spoken.append((self.now(), text))
             await self.send({"type": "alert", "id": alert_id, "level": level, "category": category, "text": text,
+                             "text_en": None if text_en == text else text_en,
                              "language": lang, "audio_b64": _b64(inline), "audio_pending": not tts.done()})
         if tts.done():
             return

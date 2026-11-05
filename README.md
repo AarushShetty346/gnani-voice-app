@@ -59,7 +59,9 @@ over noisy phone audio.
 - A risk meter, a live transcript with the suspicious phrases highlighted, a full-screen danger alert with voice
   and vibration, and a post-call summary with advice and the 1930 cybercrime helpline. The summary has "Share on
   WhatsApp" and "Copy" buttons.
-- "Warn me in": Auto (the call's language) or any of the 10 languages.
+- "Warn me in": English by default, "Same as the call", or any of the 10 languages. When the warning is in
+  another language, the alert also shows the English wording underneath.
+- Demo cards don't say which calls are scams. Kavach's verdict appears on the card after the call plays.
 
 **Languages:** Hindi, English, Bengali, Gujarati, Kannada, Malayalam, Marathi, Punjabi, Tamil, Telugu, plus
 code-mixed Hinglish.
