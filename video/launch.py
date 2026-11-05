@@ -309,9 +309,11 @@ def timeline():
        cls="cta-box", style="top:430px", i=("rise", .4), o=("none", 0))
     el(s12 + 1.8, T[0], f'{LOGO}<span>ScamLingo</span>', cls="logo", style="left:34px;top:574px;font-size:24px",
        i=("fade", .4), o=("none", 0))
-    el(s12 + 2.0, T[0], "Built by <b>Aarush Shetty</b>, VIT Vellore<br>Not 100% accurate. Doesn't block calls.<br>"
+    el(s12 + 2.0, T[0], "Built by <b>Aarush Shetty</b><br>Not 100% accurate. Doesn't block calls.<br>"
        "Demo calls are synthetic: AI voices, made-up names.",
        cls="foot", style="top:630px", i=("fade", .4), o=("none", 0))
+    el(s12 + 2.2, T[0], "#GnaniAI<br>#GreatIndianAIInternshipChallenge", cls="foot",
+       style="top:742px;font:800 21px/1.4 var(--body);color:var(--ink)", i=("fade", .4), o=("none", 0))
     return T[0]
 
 
