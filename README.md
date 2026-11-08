@@ -1,5 +1,7 @@
 # ScamLingo 🛡️
 
+**One-page pitch:** [PITCH.md](PITCH.md) ([PDF](PITCH.pdf))
+
 **A live scam-call shield for Indian phone users.** If a call feels off, put it on speaker. ScamLingo
 listens for the lingo scammers use ("digital arrest", "share the OTP", "don't tell anyone") as the call happens, and **warns you out loud in your own language** before you share an OTP
 or send money. When the call ends you get a plain-language summary you can forward to family on WhatsApp.
