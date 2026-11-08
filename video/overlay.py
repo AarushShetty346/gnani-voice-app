@@ -18,8 +18,8 @@ W, H, SCALE, FPS = 540, 960, 2, 30
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Latin:wght@500..800&family=Noto+Sans:wght@400..800&family=Noto+Sans+Devanagari:wght@400..700&family=Noto+Sans+Kannada:wght@400..700&family=Noto+Sans+Tamil:wght@400..700&display=block">
 <style>
-html,body{margin:0;width:540px;height:960px;overflow:hidden;background:transparent}
-#stage{position:relative;width:540px;height:960px;overflow:hidden}
+html,body{margin:0;width:__W__px;height:__H__px;overflow:hidden;background:transparent}
+#stage{position:relative;width:__W__px;height:__H__px;overflow:hidden}
 .el{position:absolute;transform:translate(var(--tx,0),var(--ty,0)) scale(var(--sc,1));will-change:transform,opacity}
 __CSS__
 </style></head><body><div id="stage"></div>
@@ -28,9 +28,9 @@ __CSS__
 </body></html>"""
 
 
-def write_page(out: Path, elements: list[dict], css: str) -> Path:
+def write_page(out: Path, elements: list[dict], css: str, size=(W, H)) -> Path:
     out.mkdir(parents=True, exist_ok=True)
-    html = (PAGE.replace("__CSS__", css)
+    html = (PAGE.replace("__W__", str(size[0])).replace("__H__", str(size[1])).replace("__CSS__", css)
             .replace("__TL__", json.dumps(elements, ensure_ascii=False))
             .replace("__MOTION__", (HERE / "motion.js").read_text("utf-8")))
     p = out / "overlay.html"
@@ -39,18 +39,18 @@ def write_page(out: Path, elements: list[dict], css: str) -> Path:
 
 
 async def render(out: Path, elements: list[dict], css: str, duration: float, port: int = 9351,
-                 stills: tuple = (), frosts: list | None = None) -> Path:
+                 stills: tuple = (), frosts: list | None = None, size=(W, H)) -> Path:
     """stills: times (s) to also save as preview PNGs. frosts: filled with the output-px boxes of elements
-    marked "frost" (see edit.py)."""
+    marked "frost" (see edit.py). size: the stage in CSS px (rendered at 2x)."""
     frosts = frosts if frosts is not None else []
-    page_path = write_page(out, elements, css)
+    page_path = write_page(out, elements, css, size)
     frames_dir = out / "frames"
     frames_dir.mkdir(exist_ok=True)
     for f in frames_dir.glob("*.png"):
         f.unlink()
     async with Browser(HERE / "out" / "chrome-profile-overlay", port=port) as b:
         p = b.page
-        await b.setup(W, H, SCALE)
+        await b.setup(size[0], size[1], SCALE)
         await p.send("Emulation.setDefaultBackgroundColorOverride", color={"r": 0, "g": 0, "b": 0, "a": 0})
         await p.send("Page.navigate", url=page_path.as_uri())
         await p.wait_for("window.ready && document.readyState === 'complete'", 30)
