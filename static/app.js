@@ -395,7 +395,8 @@
     const t0 = performance.now();
     const dur = 700;
     const step = (now) => {
-      const p = Math.min(1, (now - t0) / dur);
+      // rAF's timestamp can be a little earlier than t0, which would briefly show a negative score
+      const p = Math.max(0, Math.min(1, (now - t0) / dur));
       const e = 1 - Math.pow(1 - p, 3);
       const v = Math.round(from + (target - from) * e);
       S.shownScore = v;
