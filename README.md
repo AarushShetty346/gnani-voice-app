@@ -1,5 +1,6 @@
 # ScamLingo 🛡️
 
+**Demo video (3 min):** [youtu.be/DQaPu_4Ylbc](https://youtu.be/DQaPu_4Ylbc) ·
 **One-page pitch:** [PITCH.md](PITCH.md) ([PDF](PITCH.pdf))
 
 **A live scam-call shield for Indian phone users.** If a call feels off, put it on speaker. ScamLingo
