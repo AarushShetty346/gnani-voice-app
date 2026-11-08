@@ -47,4 +47,5 @@ made-up names).
 scripts per language.
 
 Built by **Aarush Shetty** (app, scam detection, UI and demo video) ·
+Demo video: [youtu.be/DQaPu_4Ylbc](https://youtu.be/DQaPu_4Ylbc) ·
 Code: [github.com/AarushShetty346/gnani-voice-app](https://github.com/AarushShetty346/gnani-voice-app)
